@@ -76,8 +76,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistan
         <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2">
           {/* Brand & Logo */}
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 font-bold">
-              <BookOpen className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 font-bold overflow-hidden">
+              <img src="/favicon.svg" alt="KAFA TAHFIZ Logo" className="w-full h-full object-cover rounded-xl" />
             </div>
             <div className="hidden sm:block">
               <div className="flex items-center gap-1.5">

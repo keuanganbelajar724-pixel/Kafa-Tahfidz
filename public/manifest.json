@@ -1,0 +1,17 @@
+{
+  "name": "KAFA TAHFIZ",
+  "short_name": "KafaTahfiz",
+  "description": "Aplikasi Pembelajaran & Hafalan Al-Qur'an 30 Juz Anak dan Keluarga",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
