@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Information about registered users or parents",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId"]
+    },
+    "ChildProfile": {
+      "title": "Child Profile",
+      "description": "Profile data for each child student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "avatar": { "type": "string" },
+        "age": { "type": "number" },
+        "grade": { "type": "string" },
+        "currentJuz": { "type": "number" },
+        "currentSurahId": { "type": "number" },
+        "targetDailyAyat": { "type": "number" },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "levelName": { "type": "string" },
+        "streak": { "type": "number" },
+        "lastActiveDate": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "AyahProgress": {
+      "title": "Ayah Progress",
+      "description": "Memorization progress for specific ayat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "childId": { "type": "string" },
+        "surahId": { "type": "number" },
+        "ayahNumber": { "type": "number" },
+        "status": { "type": "string" },
+        "score": { "type": "number" },
+        "fluencyScore": { "type": "number" },
+        "lastReviewedDate": { "type": "string" },
+        "nextReviewDate": { "type": "string" },
+        "attemptCount": { "type": "number" }
+      },
+      "required": ["childId", "surahId", "ayahNumber", "status"]
+    },
+    "SetorAttempt": {
+      "title": "Setor Attempt Log",
+      "description": "Voice setoran recording evaluations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "childId": { "type": "string" },
+        "surahId": { "type": "number" },
+        "surahName": { "type": "string" },
+        "ayahNumber": { "type": "number" },
+        "ayahText": { "type": "string" },
+        "score": { "type": "number" },
+        "accuracy": { "type": "number" },
+        "fluency": { "type": "number" },
+        "mistakesCount": { "type": "number" },
+        "feedback": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["childId", "surahId", "ayahNumber", "score"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "entity": "UserProfile",
+      "description": "Collection of user accounts"
+    },
+    "profiles": {
+      "entity": "ChildProfile",
+      "description": "Collection of child profiles"
+    },
+    "ayah_progress": {
+      "entity": "AyahProgress",
+      "description": "Collection of ayat progress"
+    },
+    "setor_attempts": {
+      "entity": "SetorAttempt",
+      "description": "Collection of setor attempts"
+    },
+    "quests": {
+      "description": "Collection of quests"
+    },
+    "badges": {
+      "description": "Collection of badges"
+    },
+    "rewards": {
+      "description": "Collection of rewards"
+    },
+    "study_plans": {
+      "description": "Collection of study plans"
+    },
+    "app_settings": {
+      "description": "Collection of app and notification settings"
+    }
+  }
+}

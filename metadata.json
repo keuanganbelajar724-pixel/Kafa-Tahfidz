@@ -1,0 +1,6 @@
+{
+  "name": "KAFA TAHFIZ",
+  "description": "Aplikasi pembelajaran hafalan Al-Qur'an anak dan keluarga: target, muraja'ah, setor hafalan, audio murottal, evaluasi, gamifikasi, dan dashboard orang tua.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-arabic: 'Amiri', 'Scheherazade New', serif;
+  }
+}
+
+.font-arabic {
+  font-family: var(--font-arabic);
+  direction: rtl;
+}
+
+.font-heading {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* Custom smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Base and Theme Body styles */
+body {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Theme: Sepia / Mushaf Parchment */
+html.theme-sepia,
+body.theme-sepia {
+  background-color: #fbf7ee !important;
+  color: #3b2a1a !important;
+}
+
+html.theme-sepia .bg-white {
+  background-color: #f5eedb !important;
+  border-color: #e6dcbe !important;
+}
+
+html.theme-sepia .bg-slate-50,
+html.theme-sepia .bg-slate-100 {
+  background-color: #efe5cb !important;
+}
+
+html.theme-sepia .border-slate-200 {
+  border-color: #e2d5b3 !important;
+}
+
+/* Theme: Midnight Navy Gold */
+html.theme-midnight,
+body.theme-midnight {
+  background-color: #060d1a !important;
+  color: #f1f5f9 !important;
+}
+
+html.theme-midnight .dark\:bg-slate-900,
+html.theme-midnight .dark\:bg-slate-800 {
+  background-color: #0d1b2e !important;
+  border-color: #1e3352 !important;
+}
+
+/* Islamic Geometric Background Pattern */
+.bg-islamic-pattern {
+  background-color: #f8fafc;
+  background-image: radial-gradient(#0d9488 0.75px, transparent 0.75px), radial-gradient(#0d9488 0.75px, #f8fafc 0.75px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+}
+
+.dark .bg-islamic-pattern {
+  background-color: #0b1329;
+  background-image: radial-gradient(#14b8a6 0.75px, transparent 0.75px), radial-gradient(#14b8a6 0.75px, #0b1329 0.75px);
+}
+
+html.theme-sepia .bg-islamic-pattern {
+  background-color: #fbf7ee;
+  background-image: radial-gradient(#b45309 0.75px, transparent 0.75px), radial-gradient(#b45309 0.75px, #fbf7ee 0.75px);
+}
+
+html.theme-midnight .bg-islamic-pattern {
+  background-color: #050b14;
+  background-image: radial-gradient(#eab308 0.75px, transparent 0.75px), radial-gradient(#eab308 0.75px, #050b14 0.75px);
+}
+
+/* Tajweed Color Highlighting Rules */
+.tajweed-ghunnah {
+  color: #ea580c !important; /* Orange */
+  font-weight: bold;
+}
+
+.tajweed-ikhfa {
+  color: #d97706 !important; /* Amber */
+  font-weight: bold;
+}
+
+.tajweed-idgham {
+  color: #059669 !important; /* Emerald green */
+  font-weight: bold;
+}
+
+.tajweed-qalqalah {
+  color: #2563eb !important; /* Blue */
+  font-weight: bold;
+}
+
+.tajweed-mad {
+  color: #db2777 !important; /* Pink/Rose */
+  font-weight: bold;
+}
+
+.tajweed-waqaf {
+  color: #7c3aed !important; /* Purple */
+}
+
+/* Print Certificate CSS */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #tahfiz-certificate-print, #tahfiz-certificate-print * {
+    visibility: visible;
+  }
+  #tahfiz-certificate-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: white !important;
+  }
+}
+
+
