@@ -11,6 +11,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { KafaAssistantModal } from './components/KafaAssistantModal';
 import { SetorHafalanModal } from './views/SetorHafalanModal';
 import { VoiceRecitationGateModal } from './components/VoiceRecitationGateModal';
+import { ContinuousVoiceFollowerModal } from './components/ContinuousVoiceFollowerModal';
 import { ChildDashboard } from './views/ChildDashboard';
 import { QuranLibrary } from './views/QuranLibrary';
 import { SurahDetailView } from './views/SurahDetailView';
@@ -42,12 +43,24 @@ const MainAppContent: React.FC = () => {
   const [voiceGateAyahNumber, setVoiceGateAyahNumber] = useState<number>(1);
   const [voiceGateJuz, setVoiceGateJuz] = useState<number>(30);
 
+  // Continuous Voice Follower (Mode Lisan Berjalan: Benar = Jalan, Salah = Berhenti)
+  const [isContinuousVoiceOpen, setIsContinuousVoiceOpen] = useState(false);
+  const [continuousVoiceSurahId, setContinuousVoiceSurahId] = useState<number>(114);
+  const [continuousVoiceAyahNumber, setContinuousVoiceAyahNumber] = useState<number>(1);
+
   const handleOpenVoiceGate = (surahId?: number, ayahNumber?: number, juzNumber?: number) => {
     const targetSurahId = surahId || selectedSurahId || activeProfile.currentSurahId || 114;
     setVoiceGateSurahId(targetSurahId);
     setVoiceGateAyahNumber(ayahNumber || 1);
     setVoiceGateJuz(juzNumber || (targetSurahId >= 78 ? 30 : 1));
     setIsVoiceGateOpen(true);
+  };
+
+  const handleOpenContinuousVoice = (surahId?: number, ayahNumber?: number) => {
+    const targetSurahId = surahId || selectedSurahId || activeProfile.currentSurahId || 114;
+    setContinuousVoiceSurahId(targetSurahId);
+    setContinuousVoiceAyahNumber(ayahNumber || 1);
+    setIsContinuousVoiceOpen(true);
   };
 
   const handleOpenSurah = (surahId: number) => {
@@ -84,6 +97,7 @@ const MainAppContent: React.FC = () => {
         onOpenOnboarding={() => setIsOnboardingOpen(true)}
         onOpenAssistant={() => setIsAssistantOpen(true)}
         onOpenVoiceGate={handleOpenVoiceGate}
+        onOpenContinuousVoice={handleOpenContinuousVoice}
       />
 
       {/* Main Content Body */}
@@ -102,6 +116,7 @@ const MainAppContent: React.FC = () => {
                 onOpenFocusStudy={handleOpenFocusStudy}
                 onOpenAssistant={() => setIsAssistantOpen(true)}
                 onOpenVoiceGate={handleOpenVoiceGate}
+                onOpenContinuousVoice={handleOpenContinuousVoice}
               />
             )}
 
@@ -115,6 +130,7 @@ const MainAppContent: React.FC = () => {
                     onNavigateAyah={(newAyah) => setFocusAyahNumber(newAyah)}
                     onOpenSetorModal={handleOpenSetor}
                     onOpenVoiceGate={handleOpenVoiceGate}
+                    onOpenContinuousVoice={handleOpenContinuousVoice}
                   />
                 ) : selectedSurahId ? (
                   <SurahDetailView
@@ -124,6 +140,7 @@ const MainAppContent: React.FC = () => {
                     onOpenFocusStudy={(sId, aNum) => handleOpenFocusStudy(sId, aNum)}
                     onOpenSetorModal={handleOpenSetor}
                     onOpenVoiceGate={handleOpenVoiceGate}
+                    onOpenContinuousVoice={handleOpenContinuousVoice}
                   />
                 ) : (
                   <QuranLibrary onSelectSurah={handleOpenSurah} />
@@ -135,10 +152,16 @@ const MainAppContent: React.FC = () => {
               <MurajaahView
                 onOpenSurah={handleOpenSurah}
                 onOpenFocusStudy={handleOpenFocusStudy}
+                onOpenContinuousVoice={handleOpenContinuousVoice}
               />
             )}
 
-            {childTab === 'games' && <MiniGamesView onOpenVoiceGate={handleOpenVoiceGate} />}
+            {childTab === 'games' && (
+              <MiniGamesView 
+                onOpenVoiceGate={handleOpenVoiceGate} 
+                onOpenContinuousVoice={handleOpenContinuousVoice}
+              />
+            )}
 
             {childTab === 'prestasi' && <AchievementsView />}
 
@@ -179,6 +202,14 @@ const MainAppContent: React.FC = () => {
         initialAyahNumber={voiceGateAyahNumber}
         initialJuz={voiceGateJuz}
         onClose={() => setIsVoiceGateOpen(false)}
+        onOpenContinuousVoice={handleOpenContinuousVoice}
+      />
+
+      <ContinuousVoiceFollowerModal
+        isOpen={isContinuousVoiceOpen}
+        initialSurahId={continuousVoiceSurahId}
+        initialAyahNumber={continuousVoiceAyahNumber}
+        onClose={() => setIsContinuousVoiceOpen(false)}
       />
 
       {setorModalData && (

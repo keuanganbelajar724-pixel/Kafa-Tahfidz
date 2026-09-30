@@ -192,3 +192,45 @@ export interface SurahCatalogItem {
   juzList: number[];
 }
 
+export interface MutabaahDailyItem {
+  id: string; // `${childId}_${dateStr}`
+  childId: string;
+  dateStr: string; // YYYY-MM-DD
+  subuh: boolean;
+  subuhJamaah: boolean;
+  dzuhur: boolean;
+  dzuhurJamaah: boolean;
+  ashar: boolean;
+  asharJamaah: boolean;
+  maghrib: boolean;
+  maghribJamaah: boolean;
+  isya: boolean;
+  isyaJamaah: boolean;
+  dhuha: boolean;
+  tahajjud: boolean;
+  tilawahDone: boolean;
+  tilawahPageOrAyat?: string;
+  ziyadahDone: boolean;
+  ziyadahSurahAyah?: string;
+  murajaahDone: boolean;
+  dzikirPagi: boolean;
+  dzikirPetang: boolean;
+  sedekahSubuh: boolean;
+  birrulWalidain: boolean;
+  notes?: string;
+  completedCount?: number;
+  totalCount?: number;
+  percentage?: number;
+}
+
+export interface TikrarConfig {
+  surahId: number;
+  startAyah: number;
+  endAyah: number;
+  repeatPerAyah: number; // 1, 3, 5, 7, 10, 20, 999 (infinite)
+  pauseBetweenSeconds: number; // 0, 1, 2, 3, 5
+  reciterId: string;
+  speed: number;
+  autoAdvance: boolean;
+}
+

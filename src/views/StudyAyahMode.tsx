@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { TajweedGuideModal } from '../components/TajweedGuideModal';
 import { MakharijulHurufModal } from '../components/MakharijulHurufModal';
+import { TikrarPlayerModal } from '../components/TikrarPlayerModal';
 
 interface StudyAyahModeProps {
   surahId: number;
@@ -38,6 +39,7 @@ interface StudyAyahModeProps {
   onNavigateAyah: (ayahNumber: number) => void;
   onOpenSetorModal: (surah: Surah, ayah: Ayah) => void;
   onOpenVoiceGate?: (surahId?: number, ayahNumber?: number) => void;
+  onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number) => void;
 }
 
 export const StudyAyahMode: React.FC<StudyAyahModeProps> = ({
@@ -47,6 +49,7 @@ export const StudyAyahMode: React.FC<StudyAyahModeProps> = ({
   onNavigateAyah,
   onOpenSetorModal,
   onOpenVoiceGate,
+  onOpenContinuousVoice,
 }) => {
   const { activeProfile, addXP } = useKafa();
   
@@ -90,6 +93,7 @@ export const StudyAyahMode: React.FC<StudyAyahModeProps> = ({
   // Learning Tools Modal
   const [isTajweedModalOpen, setIsTajweedModalOpen] = useState(false);
   const [isMakhrajModalOpen, setIsMakhrajModalOpen] = useState(false);
+  const [isTikrarModalOpen, setIsTikrarModalOpen] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentReciter = RECITERS_LIST.find((r) => r.id === selectedReciterId) || RECITERS_LIST[0];
@@ -266,6 +270,26 @@ export const StudyAyahMode: React.FC<StudyAyahModeProps> = ({
 
         {/* Visibility and learning tools */}
         <div className="flex items-center gap-1.5">
+          {onOpenContinuousVoice && (
+            <button
+              onClick={() => onOpenContinuousVoice(surahId, ayahNumber)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs font-black transition hover:scale-105 cursor-pointer shadow-xs"
+              title="Baca Mengalir: Benar = Jalan 🟢 | Salah = Berhenti 🔴"
+            >
+              <Mic className="w-3.5 h-3.5 animate-pulse text-amber-300" />
+              <span className="hidden sm:inline">Baca Berjalan</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsTikrarModalOpen(true)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-bold transition hover:scale-105 cursor-pointer shadow-xs"
+            title="Buka Pemutar Pengulang Ayat (Mode Tikrar)"
+          >
+            <Repeat className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Mode Tikrar</span>
+          </button>
+
           <button
             onClick={() => setIsTajweedModalOpen(true)}
             className="p-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 text-xs transition cursor-pointer"
@@ -491,6 +515,13 @@ export const StudyAyahMode: React.FC<StudyAyahModeProps> = ({
       <MakharijulHurufModal
         isOpen={isMakhrajModalOpen}
         onClose={() => setIsMakhrajModalOpen(false)}
+      />
+
+      <TikrarPlayerModal
+        isOpen={isTikrarModalOpen}
+        onClose={() => setIsTikrarModalOpen(false)}
+        initialSurahId={surah.id}
+        initialAyah={ayah.ayahNumber}
       />
     </div>
   );

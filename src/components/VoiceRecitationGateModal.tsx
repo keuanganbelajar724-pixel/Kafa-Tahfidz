@@ -46,6 +46,7 @@ interface VoiceRecitationGateModalProps {
   initialSurahId?: number;
   initialAyahNumber?: number;
   initialJuz?: number;
+  onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number) => void;
 }
 
 type GateMode = 'verse_by_verse' | 'finish_ayah' | 'random_ayah';
@@ -56,6 +57,7 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
   initialSurahId = 114,
   initialAyahNumber = 1,
   initialJuz = 30,
+  onOpenContinuousVoice,
 }) => {
   const { activeProfile, addXP, triggerCelebration } = useKafa();
 
@@ -680,6 +682,20 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                   Sambung Ayat
                 </button>
               </div>
+
+              {onOpenContinuousVoice && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenContinuousVoice(selectedSurahId, currentAyah.ayahNumber);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white font-black text-[11px] shadow-xs hover:scale-105 transition cursor-pointer"
+                  title="Beralih ke Mode Baca Berjalan (Hands-Free: Benar = Jalan, Salah = Berhenti)"
+                >
+                  <Mic className="w-3 h-3 text-amber-300 animate-pulse" />
+                  <span>Mode Lisan Berjalan 🚀</span>
+                </button>
+              )}
             </div>
 
             {/* Main Content Body */}

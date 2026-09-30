@@ -14,20 +14,34 @@ import {
   BookMarked,
   Mic,
   Award,
-  Scroll
+  Scroll,
+  Repeat,
+  Target,
+  FileText
 } from 'lucide-react';
 import { AppRole } from '../types';
 import { TajweedGuideModal } from './TajweedGuideModal';
 import { MakharijulHurufModal } from './MakharijulHurufModal';
 import { TahfizCertificateModal } from './TahfizCertificateModal';
+import { MutabaahYaumiyahModal } from './MutabaahYaumiyahModal';
+import { DzikirDoaModal } from './DzikirDoaModal';
+import { TikrarPlayerModal } from './TikrarPlayerModal';
+import { TahfizTargetPlannerModal } from './TahfizTargetPlannerModal';
+import { TahfizReportCardModal } from './TahfizReportCardModal';
 
 interface NavbarProps {
   onOpenOnboarding: () => void;
   onOpenAssistant: () => void;
   onOpenVoiceGate?: (surahId?: number, ayahNumber?: number) => void;
+  onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistant, onOpenVoiceGate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ 
+  onOpenOnboarding, 
+  onOpenAssistant, 
+  onOpenVoiceGate,
+  onOpenContinuousVoice 
+}) => {
   const { 
     role, 
     setRole, 
@@ -56,6 +70,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistan
   const [isTajweedModalOpen, setIsTajweedModalOpen] = useState(false);
   const [isMakhrajModalOpen, setIsMakhrajModalOpen] = useState(false);
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
+  const [isMutabaahModalOpen, setIsMutabaahModalOpen] = useState(false);
+  const [isDzikirModalOpen, setIsDzikirModalOpen] = useState(false);
+  const [isTikrarModalOpen, setIsTikrarModalOpen] = useState(false);
+  const [isPlannerModalOpen, setIsPlannerModalOpen] = useState(false);
+  const [isReportCardOpen, setIsReportCardOpen] = useState(false);
 
   const themeOptions = [
     { id: 'light', name: 'Terang (Cerah)', icon: '☀️', desc: 'Emerald Daylight', bg: 'bg-emerald-50 text-emerald-900' },
@@ -96,16 +115,73 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistan
             </div>
           </div>
 
-          {/* Center Quick Tools (Tajweed, Makhraj, Cert) */}
-          <div className="hidden lg:flex items-center gap-1.5">
+          {/* Center Quick Tools */}
+          <div className="hidden xl:flex items-center gap-1.5">
+            <button
+              onClick={() => setIsMutabaahModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition border border-emerald-300 dark:border-emerald-800/80 cursor-pointer shadow-xs"
+              title="Jurnal Ibadah Harian Santri (Mutaba'ah Yaumiyah)"
+            >
+              <span>🕌</span>
+              <span>Mutaba'ah</span>
+            </button>
+
+            <button
+              onClick={() => setIsTikrarModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/40 text-teal-800 dark:text-teal-300 text-xs font-bold transition border border-teal-300 dark:border-teal-800/80 cursor-pointer shadow-xs"
+              title="Pemutar Murottal Pengulang Ayat Otomatis (Tikrar)"
+            >
+              <Repeat className="w-3.5 h-3.5 text-teal-600" />
+              <span>Tikrar</span>
+            </button>
+
+            <button
+              onClick={() => setIsDzikirModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-800 dark:text-purple-300 text-xs font-bold transition border border-purple-200 dark:border-purple-800/80 cursor-pointer"
+              title="Dzikir Pagi Petang, Tasbih Digital & Doa Hafalan"
+            >
+              <span>📿</span>
+              <span>Dzikir & Doa</span>
+            </button>
+
+            <button
+              onClick={() => setIsPlannerModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-bold transition border border-blue-200 dark:border-blue-800/80 cursor-pointer"
+              title="Kalkulator Target Khatam & Jadwal Belajar Otomatis"
+            >
+              <Target className="w-3.5 h-3.5 text-blue-600" />
+              <span>Target</span>
+            </button>
+
+            <button
+              onClick={() => setIsReportCardOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-bold transition border border-amber-300 dark:border-amber-900/60 cursor-pointer"
+              title="Cetak Lembar Rapor Mutaba'ah & Prestasi Santri"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-600" />
+              <span>Rapor Santri</span>
+            </button>
+
+            {onOpenContinuousVoice && (
+              <button
+                onClick={() => onOpenContinuousVoice()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black shadow-sm transition cursor-pointer hover:scale-105"
+                title="Mode Lisan Berjalan: Baca Terus (Benar = Jalan 🟢 | Salah = Berhenti 🔴)"
+              >
+                <Mic className="w-3.5 h-3.5 animate-pulse text-amber-300" />
+                <span>Baca Berjalan</span>
+                <span className="text-[10px] bg-white/20 px-1 rounded-sm font-extrabold text-amber-200">Baru</span>
+              </button>
+            )}
+
             {onOpenVoiceGate && (
               <button
                 onClick={() => onOpenVoiceGate()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-extrabold shadow-sm transition cursor-pointer animate-pulse"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-700 dark:text-slate-300 text-xs font-bold transition cursor-pointer border border-slate-200 dark:border-slate-700"
                 title="Uji Lisan Real-Time & Gembok Lanjutan Ayat (Voice Gate)"
               >
-                <Mic className="w-3.5 h-3.5" />
-                <span>Uji Lisan Live</span>
+                <Mic className="w-3.5 h-3.5 text-teal-600" />
+                <span>Uji Lisan</span>
               </button>
             )}
 
@@ -114,7 +190,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistan
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 text-xs font-bold transition border border-slate-200/80 dark:border-slate-700/80 cursor-pointer"
             >
               <BookMarked className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Panduan Tajwid</span>
+              <span>Tajwid</span>
             </button>
 
             <button
@@ -122,15 +198,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistan
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 text-xs font-bold transition border border-slate-200/80 dark:border-slate-700/80 cursor-pointer"
             >
               <Mic className="w-3.5 h-3.5 text-teal-600" />
-              <span>Makharijul Huruf</span>
-            </button>
-
-            <button
-              onClick={() => setIsCertModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-bold transition border border-amber-200 dark:border-amber-900/60 cursor-pointer"
-            >
-              <Award className="w-3.5 h-3.5 text-amber-600" />
-              <span>Syahadah Tahfiz</span>
+              <span>Makhraj</span>
             </button>
           </div>
 
@@ -346,6 +414,32 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenOnboarding, onOpenAssistan
         surahId={78}
         juzNumber={30}
         score={96}
+      />
+
+      <MutabaahYaumiyahModal
+        isOpen={isMutabaahModalOpen}
+        onClose={() => setIsMutabaahModalOpen(false)}
+        onOpenDzikir={() => setIsDzikirModalOpen(true)}
+      />
+
+      <DzikirDoaModal
+        isOpen={isDzikirModalOpen}
+        onClose={() => setIsDzikirModalOpen(false)}
+      />
+
+      <TikrarPlayerModal
+        isOpen={isTikrarModalOpen}
+        onClose={() => setIsTikrarModalOpen(false)}
+      />
+
+      <TahfizTargetPlannerModal
+        isOpen={isPlannerModalOpen}
+        onClose={() => setIsPlannerModalOpen(false)}
+      />
+
+      <TahfizReportCardModal
+        isOpen={isReportCardOpen}
+        onClose={() => setIsReportCardOpen(false)}
       />
     </>
   );

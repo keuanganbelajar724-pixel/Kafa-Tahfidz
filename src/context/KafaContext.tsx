@@ -12,6 +12,7 @@ import {
   AppSettings,
   ParentNotificationSetting,
   MemorizationStatus,
+  MutabaahDailyItem,
 } from '../types';
 import { INITIAL_BADGES, INITIAL_QUESTS, INITIAL_REWARDS, getLevelForXp } from '../data/gamificationData';
 import {
@@ -24,6 +25,7 @@ import {
   syncRewardsToCloud,
   syncStudyPlansToCloud,
   syncSettingsToCloud,
+  syncMutabaahToCloud,
   fetchAllDataFromCloud,
   subscribeToProfiles
 } from '../services/firebaseSyncService';
@@ -49,6 +51,9 @@ interface KafaContextType {
   badges: AchievementBadge[];
   rewards: RewardItem[];
   studyPlans: StudyPlan[];
+  mutabaahRecords: MutabaahDailyItem[];
+  getMutabaahForDate: (childId: string, dateStr: string) => MutabaahDailyItem;
+  updateMutabaahRecord: (record: Partial<MutabaahDailyItem> & { dateStr: string; childId?: string }) => void;
   settings: AppSettings;
   parentNotifications: ParentNotificationSetting;
   cloudSync: CloudSyncState;
@@ -223,6 +228,38 @@ const INITIAL_STUDY_PLANS: StudyPlan[] = [
   },
 ];
 
+const INITIAL_MUTABAAH: MutabaahDailyItem[] = [
+  {
+    id: "child_1_2026-08-26",
+    childId: "child_1",
+    dateStr: "2026-08-26",
+    subuh: true,
+    subuhJamaah: true,
+    dzuhur: true,
+    dzuhurJamaah: true,
+    ashar: true,
+    asharJamaah: false,
+    maghrib: true,
+    maghribJamaah: true,
+    isya: true,
+    isyaJamaah: true,
+    dhuha: true,
+    tahajjud: false,
+    tilawahDone: true,
+    tilawahPageOrAyat: "Surat An-Naba' 1-10",
+    ziyadahDone: true,
+    ziyadahSurahAyah: "An-Naba' Ayat 4-5",
+    murajaahDone: true,
+    dzikirPagi: true,
+    dzikirPetang: true,
+    sedekahSubuh: true,
+    birrulWalidain: true,
+    completedCount: 11,
+    totalCount: 12,
+    percentage: 92,
+  },
+];
+
 const KafaContext = createContext<KafaContextType | undefined>(undefined);
 
 export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -268,6 +305,11 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [studyPlans, setStudyPlans] = useState<StudyPlan[]>(() => {
     const saved = localStorage.getItem('kafa_study_plans');
     return saved ? JSON.parse(saved) : INITIAL_STUDY_PLANS;
+  });
+
+  const [mutabaahRecords, setMutabaahRecords] = useState<MutabaahDailyItem[]>(() => {
+    const saved = localStorage.getItem('kafa_mutabaah');
+    return saved ? JSON.parse(saved) : INITIAL_MUTABAAH;
   });
 
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -345,6 +387,11 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (cloudData.studyPlans && cloudData.studyPlans.length > 0) {
             setStudyPlans(cloudData.studyPlans);
           }
+          if (cloudData.mutabaahRecords && cloudData.mutabaahRecords.length > 0) {
+            setMutabaahRecords(cloudData.mutabaahRecords);
+          } else {
+            await syncMutabaahToCloud(mutabaahRecords);
+          }
           if (cloudData.settings) {
             setSettings(cloudData.settings);
           }
@@ -397,6 +444,7 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         syncBadgesToCloud(badges),
         syncRewardsToCloud(rewards),
         syncStudyPlansToCloud(studyPlans),
+        syncMutabaahToCloud(mutabaahRecords),
         syncSettingsToCloud(settings, parentNotifications),
       ]);
 
@@ -430,6 +478,7 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (data.badges && data.badges.length > 0) setBadges(data.badges);
         if (data.rewards && data.rewards.length > 0) setRewards(data.rewards);
         if (data.studyPlans && data.studyPlans.length > 0) setStudyPlans(data.studyPlans);
+        if (data.mutabaahRecords && data.mutabaahRecords.length > 0) setMutabaahRecords(data.mutabaahRecords);
         if (data.settings) setSettings(data.settings);
         if (data.parentNotifs) setParentNotifications(data.parentNotifs);
 
@@ -509,6 +558,13 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       syncStudyPlansToCloud(studyPlans).catch(console.warn);
     }
   }, [studyPlans]);
+
+  useEffect(() => {
+    localStorage.setItem('kafa_mutabaah', JSON.stringify(mutabaahRecords));
+    if (isInitialCloudLoadDone.current && isInitialized) {
+      syncMutabaahToCloud(mutabaahRecords).catch(console.warn);
+    }
+  }, [mutabaahRecords]);
 
   useEffect(() => {
     localStorage.setItem('kafa_settings', JSON.stringify(settings));
@@ -823,6 +879,82 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setParentNotifications((prev) => ({ ...prev, ...newNotifications }));
   };
 
+  const getMutabaahForDate = (childId: string, dateStr: string): MutabaahDailyItem => {
+    const existing = mutabaahRecords.find((r) => r.childId === childId && r.dateStr === dateStr);
+    if (existing) return existing;
+    return {
+      id: `${childId}_${dateStr}`,
+      childId,
+      dateStr,
+      subuh: false,
+      subuhJamaah: false,
+      dzuhur: false,
+      dzuhurJamaah: false,
+      ashar: false,
+      asharJamaah: false,
+      maghrib: false,
+      maghribJamaah: false,
+      isya: false,
+      isyaJamaah: false,
+      dhuha: false,
+      tahajjud: false,
+      tilawahDone: false,
+      tilawahPageOrAyat: '',
+      ziyadahDone: false,
+      ziyadahSurahAyah: '',
+      murajaahDone: false,
+      dzikirPagi: false,
+      dzikirPetang: false,
+      sedekahSubuh: false,
+      birrulWalidain: false,
+      notes: '',
+      completedCount: 0,
+      totalCount: 12,
+      percentage: 0,
+    };
+  };
+
+  const updateMutabaahRecord = (updated: Partial<MutabaahDailyItem> & { dateStr: string; childId?: string }) => {
+    const targetChildId = updated.childId || activeProfileId;
+    const targetDateStr = updated.dateStr;
+
+    setMutabaahRecords((prev) => {
+      const existingIndex = prev.findIndex((r) => r.childId === targetChildId && r.dateStr === targetDateStr);
+      const base = existingIndex >= 0 ? prev[existingIndex] : getMutabaahForDate(targetChildId, targetDateStr);
+      const merged = { ...base, ...updated, id: `${targetChildId}_${targetDateStr}`, childId: targetChildId, dateStr: targetDateStr };
+
+      const trackableKeys = [
+        'subuh',
+        'dzuhur',
+        'ashar',
+        'maghrib',
+        'isya',
+        'tilawahDone',
+        'ziyadahDone',
+        'murajaahDone',
+        'dzikirPagi',
+        'dzikirPetang',
+        'sedekahSubuh',
+        'birrulWalidain'
+      ] as const;
+
+      const completedCount = trackableKeys.filter((k) => Boolean(merged[k])).length;
+      merged.completedCount = completedCount;
+      merged.totalCount = trackableKeys.length;
+      merged.percentage = Math.round((completedCount / trackableKeys.length) * 100);
+
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = merged;
+        return copy;
+      } else {
+        return [merged, ...prev];
+      }
+    });
+
+    addXP(10, "Mutaba'ah Ibadah Harian");
+  };
+
   const getSurahProgressStats = (surahId: number, totalAyat: number) => {
     const relevant = ayahProgressList.filter((ap) => ap.childId === activeProfileId && ap.surahId === surahId);
     const memorized = relevant.filter((ap) => ap.status === 'memorized').length;
@@ -846,6 +978,9 @@ export const KafaProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         badges,
         rewards,
         studyPlans,
+        mutabaahRecords,
+        getMutabaahForDate,
+        updateMutabaahRecord,
         settings,
         parentNotifications,
         cloudSync,

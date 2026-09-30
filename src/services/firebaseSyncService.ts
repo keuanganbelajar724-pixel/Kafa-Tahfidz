@@ -18,7 +18,8 @@ import {
   RewardItem,
   StudyPlan,
   AppSettings,
-  ParentNotificationSetting
+  ParentNotificationSetting,
+  MutabaahDailyItem
 } from '../types';
 
 export interface CloudSyncStatus {
@@ -38,6 +39,7 @@ const COLLECTIONS = {
   REWARDS: 'rewards',
   STUDY_PLANS: 'study_plans',
   APP_SETTINGS: 'app_settings',
+  MUTABAAH: 'mutabaah_records',
 };
 
 /**
@@ -219,6 +221,26 @@ export async function syncSettingsToCloud(
 }
 
 /**
+ * Save Mutabaah Daily Records to Firestore
+ */
+export async function syncMutabaahToCloud(records: MutabaahDailyItem[]): Promise<boolean> {
+  if (!isInitialized || !db) return false;
+  try {
+    await ensureFirebaseAuth();
+    const batch = writeBatch(db);
+    records.slice(0, 400).forEach((rec) => {
+      const docRef = doc(db, COLLECTIONS.MUTABAAH, rec.id);
+      batch.set(docRef, rec, { merge: true });
+    });
+    await batch.commit();
+    return true;
+  } catch (err) {
+    console.error('Error syncing mutabaah records:', err);
+    return false;
+  }
+}
+
+/**
  * Load Initial Data from Firestore
  */
 export async function fetchAllDataFromCloud() {
@@ -235,7 +257,8 @@ export async function fetchAllDataFromCloud() {
       badgesSnap,
       rewardsSnap,
       plansSnap,
-      settingsSnap
+      settingsSnap,
+      mutabaahSnap
     ] = await Promise.allSettled([
       getDocs(collection(db, COLLECTIONS.PROFILES)),
       getDocs(collection(db, COLLECTIONS.AYAH_PROGRESS)),
@@ -245,6 +268,7 @@ export async function fetchAllDataFromCloud() {
       getDocs(collection(db, COLLECTIONS.REWARDS)),
       getDocs(collection(db, COLLECTIONS.STUDY_PLANS)),
       getDoc(doc(db, COLLECTIONS.APP_SETTINGS, 'global_config')),
+      getDocs(collection(db, COLLECTIONS.MUTABAAH)),
     ]);
 
     const result: {
@@ -257,6 +281,7 @@ export async function fetchAllDataFromCloud() {
       studyPlans?: StudyPlan[];
       settings?: AppSettings;
       parentNotifs?: ParentNotificationSetting;
+      mutabaahRecords?: MutabaahDailyItem[];
     } = {};
 
     if (profilesSnap.status === 'fulfilled' && !profilesSnap.value.empty) {
@@ -284,6 +309,9 @@ export async function fetchAllDataFromCloud() {
       const data = settingsSnap.value.data();
       if (data.settings) result.settings = data.settings;
       if (data.parentNotifs) result.parentNotifs = data.parentNotifs;
+    }
+    if (mutabaahSnap.status === 'fulfilled' && !mutabaahSnap.value.empty) {
+      result.mutabaahRecords = mutabaahSnap.value.docs.map((d) => d.data() as MutabaahDailyItem);
     }
 
     return result;

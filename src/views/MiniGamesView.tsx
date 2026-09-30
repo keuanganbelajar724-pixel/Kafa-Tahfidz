@@ -28,9 +28,13 @@ type GameMode = 'menu' | 'susun_ayat' | 'tebak_surat' | 'lanjutkan_ayat' | 'teba
 
 interface MiniGamesViewProps {
   onOpenVoiceGate?: (surahId?: number, ayahNumber?: number, juzNumber?: number) => void;
+  onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number, juzNumber?: number) => void;
 }
 
-export const MiniGamesView: React.FC<MiniGamesViewProps> = ({ onOpenVoiceGate }) => {
+export const MiniGamesView: React.FC<MiniGamesViewProps> = ({ 
+  onOpenVoiceGate,
+  onOpenContinuousVoice 
+}) => {
   const { activeProfile, addXP, triggerCelebration, quests, completeQuest } = useKafa();
 
   // Active Juz Setting (1 to 30) - Defaults to Juz 30 or user profile preference
@@ -368,6 +372,51 @@ export const MiniGamesView: React.FC<MiniGamesViewProps> = ({ onOpenVoiceGate })
       {/* GAME MENU */}
       {activeGame === 'menu' && (
         <div className="space-y-6">
+          {/* Featured Continuous Voice Follower Game Card */}
+          {onOpenContinuousVoice && (
+            <div
+              onClick={() => {
+                const firstSurahInJuz = surahsInSelectedJuz[0]?.id || 114;
+                onOpenContinuousVoice(firstSurahInJuz, 1, selectedJuz);
+              }}
+              className="bg-gradient-to-r from-emerald-700 via-teal-700 to-slate-900 text-white p-6 sm:p-7 rounded-3xl border-2 border-emerald-400 shadow-xl hover:shadow-2xl transition cursor-pointer group space-y-3 relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-amber-300 flex items-center justify-center text-2xl group-hover:scale-110 transition border border-white/20">
+                    🎙️
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-lg sm:text-xl text-white group-hover:text-emerald-300 transition">
+                        Tantangan Lisan Berjalan: Baca Terus! (Juz {selectedJuz})
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
+                        Hands-Free ⭐
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-emerald-100/90 mt-0.5">
+                      Bacakan ayat mengalir: Jika benar = <strong className="text-emerald-300">Ayat Meluncur Jalan 🟢</strong> • Jika keliru = <strong className="text-rose-300">Ayat Berhenti Terkunci 🔴</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white text-emerald-900 font-black text-xs shadow-md group-hover:scale-105 transition">
+                  <Mic className="w-4 h-4 animate-pulse text-emerald-600" />
+                  <span>Mulai Lisan Berjalan</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-white/15 text-xs font-bold text-emerald-200">
+                <span>Target: Seluruh Ayat di Juz {selectedJuz} • Hadiah: +50 XP</span>
+                <span className="flex items-center gap-1 text-amber-300 font-extrabold">
+                  <span>Buka Mode Berjalan 🚀</span>
+                  <ArrowRight className="w-4 h-4" />
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Featured Voice Gate Game Card with Chosen Juz */}
           {onOpenVoiceGate && (
             <div

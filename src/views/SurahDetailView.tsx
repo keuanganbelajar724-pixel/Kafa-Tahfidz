@@ -33,6 +33,8 @@ import { MemorizationStatus } from '../types';
 import { TajweedGuideModal } from '../components/TajweedGuideModal';
 import { MakharijulHurufModal } from '../components/MakharijulHurufModal';
 import { TahfizCertificateModal } from '../components/TahfizCertificateModal';
+import { TikrarPlayerModal } from '../components/TikrarPlayerModal';
+import { getSurahTafsir } from '../data/tafsirData';
 
 interface SurahDetailViewProps {
   surahId: number;
@@ -41,6 +43,7 @@ interface SurahDetailViewProps {
   onOpenFocusStudy: (surahId: number, ayahNumber: number) => void;
   onOpenSetorModal: (surah: Surah, ayah: Ayah) => void;
   onOpenVoiceGate?: (surahId?: number, ayahNumber?: number) => void;
+  onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number) => void;
 }
 
 export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
@@ -50,6 +53,7 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
   onOpenFocusStudy,
   onOpenSetorModal,
   onOpenVoiceGate,
+  onOpenContinuousVoice,
 }) => {
   const { 
     activeProfile, 
@@ -89,6 +93,7 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
   const [showStatusMenuForAyah, setShowStatusMenuForAyah] = useState<number | null>(null);
 
   // View Options
+  const [activeDetailTab, setActiveDetailTab] = useState<'ayat' | 'tafsir'>('ayat');
   const [viewMode, setViewMode] = useState<'card' | 'page'>('card');
   const [enableTajweedColors, setEnableTajweedColors] = useState<boolean>(true);
   const [ayahSearchQuery, setAyahSearchQuery] = useState<string>('');
@@ -97,6 +102,7 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
   const [isTajweedModalOpen, setIsTajweedModalOpen] = useState(false);
   const [isMakhrajModalOpen, setIsMakhrajModalOpen] = useState(false);
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
+  const [isTikrarModalOpen, setIsTikrarModalOpen] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -247,6 +253,26 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
             </button>
           )}
 
+          {onOpenContinuousVoice && (
+            <button
+              onClick={() => onOpenContinuousVoice(surahId, 1)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs font-black shadow-sm transition hover:scale-105 cursor-pointer ring-2 ring-emerald-400/30"
+              title="Membaca Mengalir: Benar = Jalan 🟢 | Salah = Berhenti 🔴"
+            >
+              <Mic className="w-3.5 h-3.5 animate-pulse text-amber-300" />
+              <span>Baca Berjalan</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsTikrarModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-extrabold shadow-sm transition hover:scale-105 cursor-pointer"
+            title="Buka Mode Pengulang Tikrar Otomatis"
+          >
+            <Repeat className="w-3.5 h-3.5" />
+            <span>Mode Tikrar</span>
+          </button>
+
           <button
             onClick={() => setIsTajweedModalOpen(true)}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition hover:scale-105 cursor-pointer"
@@ -360,7 +386,122 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
         </div>
       )}
 
-      {/* Sticky Audio & View Mode Control Bar */}
+      {/* Tab Switcher: Ayat Al-Qur'an vs Tafsir & Tadabbur */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+        <button
+          onClick={() => setActiveDetailTab('ayat')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeDetailTab === 'ayat'
+              ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Baca & Hafal Ayat ({surah.totalAyat} Ayat)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDetailTab('tafsir')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeDetailTab === 'tafsir'
+              ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          <span>Tafsir & Asbabun Nuzul</span>
+        </button>
+      </div>
+
+      {/* TAFSIR & TADABBUR VIEW */}
+      {activeDetailTab === 'tafsir' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-md space-y-6">
+          {(() => {
+            const tafsir = getSurahTafsir(surah.id);
+            return (
+              <>
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 flex items-center justify-center text-xl">
+                      💡
+                    </span>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                        Kandungan & Mutiara Hikmah Surat {surah.nameLatin || surah.nameId}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Memahami makna membuat hafalan menancap kuat dan berbuah akhlak mulia
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setIsTikrarModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  >
+                    <Repeat className="w-3.5 h-3.5" />
+                    <span>Mulai Mode Tikrar</span>
+                  </button>
+                </div>
+
+                {/* Tema Pokok */}
+                <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/80 space-y-1.5">
+                  <h4 className="text-xs font-extrabold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
+                    🌟 Tema Utama Surat
+                  </h4>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                    {tafsir.theme}
+                  </p>
+                </div>
+
+                {/* Asbabun Nuzul */}
+                <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/80 space-y-1.5">
+                  <h4 className="text-xs font-extrabold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
+                    📜 Asbabun Nuzul (Sebab Turunnya Surat)
+                  </h4>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                    {tafsir.asbabunNuzul}
+                  </p>
+                </div>
+
+                {/* Key Lessons */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                    💎 Pelajaran & Hikmah Penting untuk Santri:
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {tafsir.keyLessons.map((lesson, idx) => (
+                      <div 
+                        key={idx}
+                        className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800 flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300"
+                      >
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <span className="leading-relaxed">{lesson}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Moral Virtue */}
+                <div className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/80 space-y-1">
+                  <h4 className="text-xs font-extrabold text-purple-900 dark:text-purple-300 uppercase tracking-wider">
+                    🌸 Keutamaan Mengamalkan Kandungannya
+                  </h4>
+                  <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                    {tafsir.moralVirtue}
+                  </p>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Sticky Audio & View Mode Control Bar (Visible when activeDetailTab === 'ayat') */}
+      {activeDetailTab === 'ayat' && (
+      <>
       <div className="sticky top-18 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl p-3 sm:p-4 border border-slate-200 dark:border-slate-800 shadow-md space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Play All / Pause button */}
@@ -663,6 +804,8 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
           })}
         </div>
       )}
+      </>
+      )}
 
       {/* Global Modals */}
       <TajweedGuideModal
@@ -682,6 +825,13 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
         surahId={surah.id}
         juzNumber={surah.juzNumber}
         score={stats.percentage > 0 ? Math.max(90, stats.percentage) : 95}
+      />
+
+      <TikrarPlayerModal
+        isOpen={isTikrarModalOpen}
+        onClose={() => setIsTikrarModalOpen(false)}
+        initialSurahId={surah.id}
+        initialAyah={1}
       />
     </div>
   );

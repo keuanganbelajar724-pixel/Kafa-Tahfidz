@@ -14,13 +14,15 @@ import {
   Star,
   ChevronRight,
   Clock,
-  Sparkle
+  Sparkle,
+  Mic
 } from 'lucide-react';
 import { AyahProgress } from '../types';
 
 interface MurajaahViewProps {
   onOpenSurah: (surahId: number) => void;
   onOpenFocusStudy: (surahId: number, ayahNumber: number) => void;
+  onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number) => void;
 }
 
 type MurajaahTab = 'today' | 'weak' | 'mastered' | 'all';
@@ -28,6 +30,7 @@ type MurajaahTab = 'today' | 'weak' | 'mastered' | 'all';
 export const MurajaahView: React.FC<MurajaahViewProps> = ({
   onOpenSurah,
   onOpenFocusStudy,
+  onOpenContinuousVoice,
 }) => {
   const { 
     activeProfile, 
@@ -115,6 +118,36 @@ export const MurajaahView: React.FC<MurajaahViewProps> = ({
           <div className="text-[11px] font-bold text-teal-100">Ayat Target Hari Ini</div>
         </div>
       </div>
+
+      {/* Quick Launch Continuous Voice Follower for Murajaah */}
+      {onOpenContinuousVoice && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-slate-900 rounded-3xl p-4 sm:p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg border border-emerald-400/30">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-0.5 rounded-full bg-white/20 text-white">
+                Muraja'ah Mengalir
+              </span>
+              <span className="text-xs text-amber-300 font-extrabold">
+                Benar = Jalan 🟢 | Salah = Berhenti 🔴
+              </span>
+            </div>
+            <h3 className="font-black text-base sm:text-lg">
+              Muraja'ah Lisan Berjalan Tanpa Henti 🎙️
+            </h3>
+            <p className="text-xs text-emerald-100 max-w-lg">
+              Uji kelancaran muraja'ahmu langsung dengan lisan! Jika lancar ayat meluncur maju, jika ragu atau keliru ayat berhenti seketika.
+            </p>
+          </div>
+
+          <button
+            onClick={() => onOpenContinuousVoice(activeProfile.currentSurahId || 114, 1)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white text-emerald-900 font-black text-xs shadow-md hover:bg-emerald-50 transition cursor-pointer self-start sm:self-center shrink-0 hover:scale-105"
+          >
+            <Mic className="w-4 h-4 text-emerald-600 animate-pulse" />
+            <span>Mulai Muraja'ah Lisan 🚀</span>
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">

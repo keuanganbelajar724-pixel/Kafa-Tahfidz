@@ -18,8 +18,10 @@ import {
   AlertTriangle,
   Play,
   Download,
-  Share2
+  Share2,
+  Printer
 } from 'lucide-react';
+import { TahfizReportCardModal } from '../components/TahfizReportCardModal';
 
 export const ParentDashboard: React.FC = () => {
   const { 
@@ -40,6 +42,7 @@ export const ParentDashboard: React.FC = () => {
 
   const [selectedChildId, setSelectedChildId] = useState(activeProfileId);
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'study_plan' | 'rewards' | 'notifications' | 'reports'>('overview');
+  const [isReportCardModalOpen, setIsReportCardModalOpen] = useState(false);
 
   // Study Plan Form
   const [planSurahId, setPlanSurahId] = useState(78);
@@ -581,13 +584,23 @@ export const ParentDashboard: React.FC = () => {
               </p>
             </div>
 
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold transition"
-            >
-              <Download className="w-4 h-4" />
-              <span>Cetak / Simpan PDF</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsReportCardModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Buka Rapor Resmi & Mutqin</span>
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-bold transition cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Cetak / Simpan PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
@@ -621,6 +634,12 @@ export const ParentDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Rapor Modal */}
+      <TahfizReportCardModal
+        isOpen={isReportCardModalOpen}
+        onClose={() => setIsReportCardModalOpen(false)}
+      />
     </div>
   );
 };
