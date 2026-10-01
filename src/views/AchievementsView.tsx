@@ -47,7 +47,7 @@ export const AchievementsView: React.FC = () => {
   const sortedLeaderboard = [...profiles].sort((a, b) => b.xp - a.xp);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-28">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6 pb-28">
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -139,7 +139,7 @@ export const AchievementsView: React.FC = () => {
             <h4 className="font-extrabold text-sm text-slate-700 dark:text-slate-300">
               Peta Perjalanan Level:
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {LEVELS.map((lvl) => {
                 const isCurrent = lvl.level === currentLevelInfo.level;
                 const isPassed = activeProfile.xp >= lvl.minXp;
@@ -189,7 +189,7 @@ export const AchievementsView: React.FC = () => {
 
       {/* TAB 2: BADGES GALLERY */}
       {activeTab === 'badges' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {badges.map((badge) => (
             <div
               key={badge.id}
@@ -317,7 +317,7 @@ export const AchievementsView: React.FC = () => {
             💡 <strong>Info Hadiah:</strong> Hadiah diatur oleh Orang Tua sebagai bentuk apresiasi non-finansial atas ketekunan hafalan anak.
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {childRewards.map((rew) => {
               const canAfford = activeProfile.xp >= rew.costXP;
 

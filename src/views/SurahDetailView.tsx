@@ -229,7 +229,7 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
     : surah.ayat;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 pb-28">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6 pb-28">
       {/* Top Bar with Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button

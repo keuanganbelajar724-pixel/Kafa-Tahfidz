@@ -66,7 +66,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-28">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 space-y-6 pb-28">
       {/* Admin Banner */}
       <div className="bg-gradient-to-r from-purple-800 via-slate-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex items-center justify-between gap-4">
         <div className="space-y-1">

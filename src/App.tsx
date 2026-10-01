@@ -101,7 +101,7 @@ const MainAppContent: React.FC = () => {
       />
 
       {/* Main Content Body */}
-      <main className="flex-1">
+      <main className="flex-1 w-full">
         {role === 'parent' ? (
           <ParentDashboard />
         ) : role === 'admin' ? (
