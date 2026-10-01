@@ -98,7 +98,7 @@ export const QuranLibrary: React.FC<QuranLibraryProps> = ({ onSelectSurah }) => 
   }, [selectedJuz, allJuzList]);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-28">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 pb-28">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden">
         <div className="absolute -right-8 -bottom-8 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -344,7 +344,7 @@ export const QuranLibrary: React.FC<QuranLibraryProps> = ({ onSelectSurah }) => 
       )}
 
       {/* Surah List Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filteredSurahs.map((surah) => {
           const stats = getSurahProgressStats(surah.id, surah.totalAyat);
           const isComplete = stats.percentage === 100;

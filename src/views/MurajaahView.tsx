@@ -95,7 +95,7 @@ export const MurajaahView: React.FC<MurajaahViewProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-28">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 pb-28">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-teal-600 to-emerald-600 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5">
@@ -172,7 +172,7 @@ export const MurajaahView: React.FC<MurajaahViewProps> = ({
       </div>
 
       {/* Muraja'ah Cards List */}
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {currentList.map((item) => {
           const catalogItem = getSurahCatalogItem(item.surahId);
           const surah = getSurahSync(item.surahId) || {
