@@ -359,7 +359,7 @@ export const MurajaahView: React.FC<MurajaahViewProps> = ({
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs shadow-lg transition transform hover:scale-105 cursor-pointer"
                 >
                   <Mic className="w-4 h-4 text-emerald-950 animate-pulse" />
-                  <span>Muraja'ah Lisan Juz {selectedJuz} 🚀</span>
+                  <span>Tarteel AI Hafalan Juz {selectedJuz} ✨</span>
                 </button>
               )}
 
@@ -442,10 +442,10 @@ export const MurajaahView: React.FC<MurajaahViewProps> = ({
                         <button
                           onClick={() => onOpenContinuousVoice(s.id, 1)}
                           className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-xs transition cursor-pointer"
-                          title="Muraja'ah dengan Suara Mengalir"
+                          title="Hafalan ala Tarteel AI (Sembunyikan Ayat & Koreksi Akurat)"
                         >
-                          <Mic className="w-3.5 h-3.5" />
-                          <span>Lisan 🎙️</span>
+                          <Mic className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Tarteel AI 🎙️</span>
                         </button>
                       )}
 

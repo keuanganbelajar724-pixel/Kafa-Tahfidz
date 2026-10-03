@@ -165,12 +165,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             {onOpenContinuousVoice && (
               <button
                 onClick={() => onOpenContinuousVoice()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black shadow-sm transition cursor-pointer hover:scale-105"
-                title="Mode Lisan Berjalan: Baca Terus (Benar = Jalan 🟢 | Salah = Berhenti 🔴)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black shadow-md transition cursor-pointer hover:scale-105"
+                title="Mode Hafalan ala Tarteel AI: Sembunyikan Ayat, Deteksi Suara Real-Time & Koreksi Akurat"
               >
                 <Mic className="w-3.5 h-3.5 animate-pulse text-amber-300" />
-                <span>Baca Berjalan</span>
-                <span className="text-[10px] bg-white/20 px-1 rounded-sm font-extrabold text-amber-200">Baru</span>
+                <span>Tarteel AI Hafalan</span>
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-md font-extrabold text-amber-200">AI</span>
               </button>
             )}
 

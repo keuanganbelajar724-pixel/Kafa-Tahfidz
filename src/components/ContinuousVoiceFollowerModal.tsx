@@ -10,7 +10,12 @@ import {
   RECITERS_LIST
 } from '../services/quranService';
 import { soundEffects } from '../utils/soundEffects';
-import { evaluateAyahVoiceRecitation, removeArabicHarakat, WordMatchStatus, MatchSensitivity } from '../utils/arabicVoiceMatcher';
+import { 
+  evaluateAyahVoiceRecitation, 
+  removeArabicHarakat, 
+  WordMatchStatus, 
+  MatchSensitivity 
+} from '../utils/arabicVoiceMatcher';
 import { 
   X, 
   Mic, 
@@ -22,8 +27,8 @@ import {
   CheckCircle2, 
   AlertCircle, 
   RotateCcw, 
-  ChevronDown, 
   ChevronRight,
+  ChevronLeft,
   Flame, 
   Check, 
   Play, 
@@ -32,10 +37,14 @@ import {
   Sliders,
   SkipForward,
   BookOpen,
-  Filter,
-  CheckCheck,
-  ShieldCheck,
-  Zap
+  Eye,
+  EyeOff,
+  Clock,
+  Layers,
+  Zap,
+  HelpCircle,
+  Trophy,
+  ArrowRight
 } from 'lucide-react';
 
 interface ContinuousVoiceFollowerModalProps {
@@ -45,7 +54,8 @@ interface ContinuousVoiceFollowerModalProps {
   initialAyahNumber?: number;
 }
 
-type SensitivityLevel = 'ramah_anak' | 'standar' | 'ketat';
+export type TarteelDisplayMode = 'blind_hidden' | 'first_word' | 'open_text';
+export type SensitivityLevel = 'ramah_anak' | 'standar' | 'ketat';
 
 export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModalProps> = ({
   isOpen,
@@ -59,9 +69,18 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
   const [selectedJuz, setSelectedJuz] = useState<number>(() => (initialSurahId >= 78 ? 30 : 1));
   const [selectedSurahId, setSelectedSurahId] = useState<number>(initialSurahId || 114);
   const [selectedReciter, setSelectedReciter] = useState<string>('alafasy');
-  const [sensitivity, setSensitivity] = useState<SensitivityLevel>('ramah_anak');
+  
+  // Tarteel Modes
+  const [displayMode, setDisplayMode] = useState<TarteelDisplayMode>('blind_hidden');
+  const [sensitivity, setSensitivity] = useState<SensitivityLevel>('ketat'); // Default strict for accurate memorization
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
+  // Peek Hint Timer (Intip Ayat selama 4 detik)
+  const [isPeekingCurrentAyah, setIsPeekingCurrentAyah] = useState<boolean>(false);
+  const [peekCountdown, setPeekCountdown] = useState<number>(0);
+  const peekTimerRef = useRef<any>(null);
+
+  // Surah Data
   const [surah, setSurah] = useState<Surah>(() => {
     return getSurahSync(initialSurahId || 114) || {
       id: 114,
@@ -88,9 +107,20 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
   const [isListening, setIsListening] = useState<boolean>(false);
   const [liveTranscript, setLiveTranscript] = useState<string>('');
   const [recognitionError, setRecognitionError] = useState<string | null>(null);
-  const [currentFeedback, setCurrentFeedback] = useState<string>('Siap mendengarkan bacaanmu.');
+  const [currentFeedback, setCurrentFeedback] = useState<string>('Tekan tombol Mikrofon untuk mulai hafalan ala Tarteel AI...');
   const [isWrongLocked, setIsWrongLocked] = useState<boolean>(false);
-  const [consecutiveCount, setConsecutiveCount] = useState<number>(0);
+  const [errorDetail, setErrorDetail] = useState<{
+    wordIndex: number;
+    expectedWord: string;
+    expectedClean: string;
+    heardWord?: string;
+  } | null>(null);
+
+  // Session Stats
+  const [sessionStartTime] = useState<number>(Date.now());
+  const [sessionSeconds, setSessionSeconds] = useState<number>(0);
+  const [totalMemorizedInSession, setTotalMemorizedInSession] = useState<number>(0);
+  const [consecutiveCorrect, setConsecutiveCorrect] = useState<number>(0);
   const [isSurahCompleted, setIsSurahCompleted] = useState<boolean>(false);
 
   // Audio Hint Sheikh State
@@ -102,10 +132,18 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
   const shouldKeepListeningRef = useRef<boolean>(false);
   const activeAyahContainerRef = useRef<HTMLDivElement | null>(null);
   const isAdvancingRef = useRef<boolean>(false);
-  const silenceTimeoutRef = useRef<any>(null);
 
   const catalogList = getAllSurahCatalog();
   const allJuzList = getAllJuzList();
+
+  // Timer for session duration
+  useEffect(() => {
+    if (!isOpen || isSurahCompleted) return;
+    const interval = setInterval(() => {
+      setSessionSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, isSurahCompleted]);
 
   // Load surah data
   useEffect(() => {
@@ -138,6 +176,7 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
     return () => {
       mounted = false;
       stopContinuousListening();
+      if (peekTimerRef.current) clearInterval(peekTimerRef.current);
     };
   }, [selectedSurahId, isOpen, initialAyahNumber]);
 
@@ -148,8 +187,10 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
     });
     setAyahStatuses(map);
     setIsWrongLocked(false);
+    setErrorDetail(null);
     setIsSurahCompleted(false);
-    setConsecutiveCount(0);
+    setConsecutiveCorrect(0);
+    setTotalMemorizedInSession(0);
     setLiveTranscript('');
   };
 
@@ -184,7 +225,7 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
 
     if (!SpeechRecognition) {
       setRecognitionError(
-        'Browser belum mendukung Web Speech API secara native. Anda bisa mencoba di Google Chrome / Microsoft Edge, atau gunakan tombol Simulasi Suara di bawah!'
+        'Browser belum mengizinkan Web Speech API secara native. Gunakan Google Chrome / Edge atau uji dengan tombol "Simulasi Lisan" di samping!'
       );
       return;
     }
@@ -205,7 +246,11 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
       recognition.onstart = () => {
         setIsListening(true);
         soundEffects.playListeningPing();
-        setCurrentFeedback('🎤 Mikrofon aktif! Bacakan ayat yang ditandai hijau...');
+        setCurrentFeedback(
+          displayMode === 'blind_hidden'
+            ? `🎙️ Tarteel AI aktif mendengarkan! Bacakan Ayat ${currentAyah.ayahNumber} dari ingatanmu...`
+            : `🎙️ Tarteel AI aktif mendengarkan! Bacakan Ayat ${currentAyah.ayahNumber}...`
+        );
       };
 
       recognition.onresult = (event: any) => {
@@ -232,14 +277,14 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
       recognition.onerror = (event: any) => {
         console.warn('Speech recognition warning:', event.error);
         if (event.error === 'not-allowed') {
-          setRecognitionError('Izin mikrofon tidak diberikan. Silakan izinkan akses mikrofon di browser Anda.');
+          setRecognitionError('Izin mikrofon belum aktif. Izinkan akses mikrofon di browser Anda untuk mendeteksi hafalan suara.');
           shouldKeepListeningRef.current = false;
           setIsListening(false);
         }
       };
 
       recognition.onend = () => {
-        // If user wants to keep reciting continuously, auto-restart speech recognition!
+        // Tarteel Continuous Loop: If user hasn't stopped, keep listening continuously
         if (shouldKeepListeningRef.current && isOpen && !isSurahCompleted) {
           try {
             recognition.start();
@@ -261,7 +306,6 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
 
   const stopContinuousListening = () => {
     shouldKeepListeningRef.current = false;
-    if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -274,9 +318,9 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
     setIsListening(false);
   };
 
-  // Evaluation logic:
-  // 🟢 JIKA BENAR -> AYAT JALAN (Auto Advance ke ayat berikutnya)
-  // 🔴 JIKA SALAH -> AYAT TIDAK JALAN (Terkunci merah di tempat sampai dibaca benar)
+  // Evaluation logic: 100% accurate word-by-word Tashih
+  // 🟢 JIKA BENAR -> AYAT TERBUKA & MELUNCUR MAJU KE AYAT BERIKUTNYA
+  // 🔴 JIKA SALAH KATA ATAU HURUF -> TERKUNCI & TIDAK LANJUT SAMPAI DIBENARKAN
   const handleEvaluateSpokenAyah = (spokenText: string, isFinal = false) => {
     if (!currentAyah || isAdvancingRef.current) return;
 
@@ -288,18 +332,16 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
       matchSens
     );
 
-    // Apply sensitivity tolerance
-    let passes = evalResult.isCorrect;
-    if (sensitivity === 'ramah_anak') {
-      passes = evalResult.score >= 50 || evalResult.isCorrect;
-    } else if (sensitivity === 'ketat') {
-      passes = evalResult.score >= 80;
-    }
-
-    if (passes) {
-      // 🟢 JIKA BENAR: AYAT JALAN / LANJUT OTOMATIS KE AYAT BERIKUTNYA!
+    // Strictly require evalResult.isCorrect to pass!
+    // Never bypass if middle words or letters are incorrect!
+    if (evalResult.isCorrect) {
+      // 🟢 JIKA BENAR:
+      // 1. Ayat terbuka dengan kilau hijau
+      // 2. Play success chime
+      // 3. Auto advance ke ayat berikutnya tanpa batas 5 ayat
       isAdvancingRef.current = true;
       setIsWrongLocked(false);
+      setErrorDetail(null);
       soundEffects.playCorrect();
 
       // Mark current ayah as correct
@@ -308,9 +350,11 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
         [currentAyah.ayahNumber]: 'correct',
       }));
 
-      setCurrentFeedback(`✨ Masya Allah Benar! Ayat ${currentAyah.ayahNumber} tuntas. Ayat meluncur maju... 🔓`);
-      setConsecutiveCount((c) => c + 1);
-      addXP(10, `Lancar Lisan Surat ${surah.nameLatin} Ayat ${currentAyah.ayahNumber}`);
+      setTotalMemorizedInSession((c) => c + 1);
+      setConsecutiveCorrect((c) => c + 1);
+      addXP(15, `Hafalan Tarteel AI: Surat ${surah.nameLatin} Ayat ${currentAyah.ayahNumber}`);
+
+      setCurrentFeedback(`✨ Masya Allah Tepat & Fasih! Ayat ${currentAyah.ayahNumber} terbuka 🔓`);
 
       // Smooth brief transition before auto-scrolling to next ayah
       setTimeout(() => {
@@ -324,24 +368,25 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
             [surah.ayat[nextIndex].ayahNumber]: 'active',
           }));
 
-          setCurrentFeedback(`🎤 Lanjutkan bacakan Ayat ${surah.ayat[nextIndex].ayahNumber}...`);
+          setCurrentFeedback(`🎤 Sambung hafalanmu ke Ayat ${surah.ayat[nextIndex].ayahNumber}...`);
           isAdvancingRef.current = false;
         } else {
-          // Entire surah completed!
+          // Entire surah completed! No 5-ayah limit!
           setIsSurahCompleted(true);
           soundEffects.playFanfare();
           triggerCelebration();
-          addXP(50, `Khatam Lisan Berjalan Surat ${surah.nameLatin}!`);
-          setCurrentFeedback(`🎉 Alhamdulillah! Seluruh ${surah.totalAyat} ayat Surat ${surah.nameLatin} berhasil dibaca tuntas!`);
+          addXP(100, `Khatam Hafalan Surat ${surah.nameLatin} ala Tarteel AI!`);
+          setCurrentFeedback(`🎉 Alhamdulillah! Seluruh ${surah.totalAyat} ayat Surat ${surah.nameLatin} tuntas dihafal!`);
           stopContinuousListening();
           isAdvancingRef.current = false;
         }
-      }, 850);
+      }, 950);
 
     } else if (isFinal) {
-      // 🔴 JIKA SALAH (DAN USER SUDAH SELESAI MENGUCAPKAN KALIMATNYA):
-      // AYAT TERKUNCI & TIDAK AKAN JALAN!
+      // 🔴 JIKA SALAH KATA/HURUF DAN SUDAH SELESAI BICARA:
+      // Ayat terkunci merah, beri tahu kata yang salah, TIDAK AKAN MAJU!
       setIsWrongLocked(true);
+      setErrorDetail(evalResult.errorDetail || null);
       soundEffects.playIncorrect();
 
       setAyahStatuses((prev) => ({
@@ -349,10 +394,27 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
         [currentAyah.ayahNumber]: 'wrong',
       }));
 
-      setCurrentFeedback(
-        `⛔ BACAAN KELIRU / TERHENTI! Ayat ${currentAyah.ayahNumber} terkunci merah 🔒. Ayat tidak akan lanjut sampai kamu membacanya dengan tepat. Silakan ulangi ayat ini!`
-      );
+      setCurrentFeedback(evalResult.feedbackMessage);
     }
+  };
+
+  // Peek Feature: Intip Ayat selama 4 detik lalu sembunyikan kembali
+  const handleTriggerPeek = () => {
+    if (isPeekingCurrentAyah) return;
+    setIsPeekingCurrentAyah(true);
+    setPeekCountdown(4);
+
+    if (peekTimerRef.current) clearInterval(peekTimerRef.current);
+    peekTimerRef.current = setInterval(() => {
+      setPeekCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(peekTimerRef.current);
+          setIsPeekingCurrentAyah(false);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
   };
 
   // Sheikh Audio Hint
@@ -377,27 +439,51 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
 
     const audio = new Audio(audioUrl);
     sheikhAudioRef.current = audio;
-    setIsPlayingSheikhHint(true);
-    audio.play().catch(() => {
-      setIsPlayingSheikhHint(false);
-    });
 
-    audio.onended = () => {
-      setIsPlayingSheikhHint(false);
-    };
+    audio.onplay = () => setIsPlayingSheikhHint(true);
+    audio.onended = () => setIsPlayingSheikhHint(false);
+    audio.onerror = () => setIsPlayingSheikhHint(false);
+
+    audio.play().catch(() => setIsPlayingSheikhHint(false));
   };
 
-  // Manual Skip (with gentle status)
+  // Test simulation buttons for quick testing
+  const handleSimulateRecitation = (type: 'correct' | 'wrong_word' | 'ending_only') => {
+    if (!currentAyah) return;
+
+    if (type === 'correct') {
+      setLiveTranscript(currentAyah.textArabic);
+      handleEvaluateSpokenAyah(currentAyah.textArabic, true);
+    } else if (type === 'wrong_word') {
+      // Intentionally substitute a word in the middle
+      const words = currentAyah.textArabic.split(' ');
+      if (words.length > 2) {
+        words[1] = 'الظالمين'; // intentionally wrong middle word
+      }
+      const fakeText = words.join(' ');
+      setLiveTranscript(fakeText);
+      handleEvaluateSpokenAyah(fakeText, true);
+    } else if (type === 'ending_only') {
+      // Only the last word (rhyme only)
+      const words = currentAyah.textArabic.split(' ');
+      const lastWord = words[words.length - 1];
+      setLiveTranscript(lastWord);
+      handleEvaluateSpokenAyah(lastWord, true);
+    }
+  };
+
+  // Manual Skip
   const handleSkipAyah = () => {
     if (activeAyahIndex + 1 < surah.ayat.length) {
       const nextIndex = activeAyahIndex + 1;
+      setActiveAyahIndex(nextIndex);
       setAyahStatuses((prev) => ({
         ...prev,
         [currentAyah.ayahNumber]: 'wrong',
         [surah.ayat[nextIndex].ayahNumber]: 'active',
       }));
-      setActiveAyahIndex(nextIndex);
       setIsWrongLocked(false);
+      setErrorDetail(null);
       setLiveTranscript('');
       setCurrentFeedback(`Ayat ${currentAyah.ayahNumber} dilewati. Silakan bacakan Ayat ${surah.ayat[nextIndex].ayahNumber}...`);
     }
@@ -409,7 +495,14 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
     setActiveAyahIndex(0);
     initStatuses(surah, 0);
     setLiveTranscript('');
-    setCurrentFeedback('Telah direset ke Ayat 1. Tekan tombol mikrofon untuk mulai membaca!');
+    setCurrentFeedback('Telah direset ke Ayat 1. Tekan tombol Mikrofon untuk mulai menghafal!');
+  };
+
+  // Format session time (MM:SS)
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   if (!isOpen) return null;
@@ -417,15 +510,16 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-[95vh] max-h-[95vh] overflow-hidden"
+        className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-[95vh] max-h-[95vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* HEADER */}
-        <div className="px-5 sm:px-6 py-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-950 text-white flex items-center justify-between shrink-0 shadow-lg border-b border-emerald-600/30">
+        {/* HEADER: TARTEEL AI BRANDING & NAVIGATION */}
+        <div className="px-5 sm:px-6 py-3.5 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 text-white flex items-center justify-between shrink-0 shadow-lg border-b border-emerald-600/30">
           <div className="flex items-center gap-3">
+            {/* Tarteel Logo & Animated Mic */}
             <div className="relative">
-              <div className="w-11 h-11 rounded-2xl bg-white/10 flex items-center justify-center text-2xl shadow-inner border border-white/20">
-                🎙️
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 p-0.5 flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/20 font-bold overflow-hidden">
+                <span className="text-xl">🎙️</span>
               </div>
               {isListening && (
                 <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
@@ -434,26 +528,58 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                 </span>
               )}
             </div>
+
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-300/30">
-                  Mode Lisan Berjalan (Voice Follower)
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  Tarteel AI Hafalan Qur'an
                 </span>
-                <span className="text-xs text-amber-300 font-extrabold flex items-center gap-1">
+                <span className="text-xs text-amber-300 font-extrabold hidden sm:flex items-center gap-1">
                   <Zap className="w-3 h-3 fill-amber-300" />
-                  Benar = Jalan 🟢 | Salah = Berhenti 🔴
+                  Deteksi Suara Real-Time • Tanpa Batas Ayat
                 </span>
               </div>
-              <h2 className="text-lg sm:text-xl font-black tracking-tight mt-0.5 flex items-center gap-2">
-                <span>Surat {surah.nameLatin || surah.nameId}</span>
-                <span className="font-arabic text-emerald-300 font-normal text-base sm:text-lg">({surah.nameArabic})</span>
-                <span className="text-xs font-bold text-slate-300">({surah.totalAyat} Ayat)</span>
-              </h2>
+
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
+                  <span>Surat {surah.nameLatin || surah.nameId}</span>
+                  <span className="font-arabic text-emerald-300 font-normal text-base sm:text-lg">({surah.nameArabic})</span>
+                </h2>
+                <span className="text-xs font-bold text-slate-300">
+                  • Ayat {activeAyahIndex + 1} dari {surah.totalAyat}
+                </span>
+              </div>
             </div>
           </div>
 
+          {/* Quick Selectors & Control Buttons */}
           <div className="flex items-center gap-2">
-            {/* Quick Surah Dropdown */}
+            {/* Juz Selector */}
+            <div className="hidden lg:flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-2xl px-2.5 py-1 text-xs">
+              <span className="text-emerald-300 font-bold">Juz:</span>
+              <select
+                value={selectedJuz}
+                onChange={(e) => {
+                  const jNum = Number(e.target.value);
+                  setSelectedJuz(jNum);
+                  const surahsInJuz = catalogList.filter((s) => s.juzNumber === jNum);
+                  if (surahsInJuz.length > 0) {
+                    stopContinuousListening();
+                    setSelectedSurahId(surahsInJuz[0].id);
+                  }
+                }}
+                className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs"
+              >
+                {allJuzList.map((j) => (
+                  <option key={j.juzNumber} value={j.juzNumber} className="text-slate-900 bg-white">
+                    Juz {j.juzNumber} ({j.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Surah Selector */}
             <div className="hidden md:flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-2xl px-2.5 py-1 text-xs">
               <BookOpen className="w-3.5 h-3.5 text-emerald-300" />
               <select
@@ -462,7 +588,7 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                   stopContinuousListening();
                   setSelectedSurahId(Number(e.target.value));
                 }}
-                className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs"
+                className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs max-w-[140px] truncate"
               >
                 {catalogList.map((s) => (
                   <option key={s.id} value={s.id} className="text-slate-900 bg-white">
@@ -472,7 +598,7 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
               </select>
             </div>
 
-            {/* Toggle Settings Modal */}
+            {/* Settings Button */}
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`p-2 rounded-2xl border transition cursor-pointer ${
@@ -480,11 +606,12 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                   ? 'bg-emerald-500 text-white border-emerald-400' 
                   : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
               }`}
-              title="Pengaturan Mode Lisan (Toleransi & Qari)"
+              title="Pengaturan Mode Tarteel (Sembunyi Ayat, Sensitivitas Tashih & Qari)"
             >
               <Sliders className="w-4 h-4" />
             </button>
 
+            {/* Close Button */}
             <button
               onClick={() => {
                 stopContinuousListening();
@@ -497,51 +624,128 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
           </div>
         </div>
 
-        {/* SETTINGS DRAWER / COLLAPSIBLE */}
+        {/* TARTEEL CONTROL BAR: 3 DISPLAY MODES & LIVE WAVEFORM */}
+        <div className="px-4 sm:px-6 py-2.5 bg-slate-900 text-white border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+          {/* Display Mode Tabs (like Tarteel) */}
+          <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-2xl border border-slate-700">
+            <button
+              onClick={() => setDisplayMode('blind_hidden')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                displayMode === 'blind_hidden'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Ayat disembunyikan. Terbuka otomatis saat dibaca benar!"
+            >
+              <EyeOff className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Sembunyikan Ayat (Hafalan)</span>
+            </button>
+
+            <button
+              onClick={() => setDisplayMode('first_word')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                displayMode === 'first_word'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Hanya kata pertama yang tampak untuk memicu ingatan"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-teal-300" />
+              <span>Kata Pertama Saja</span>
+            </button>
+
+            <button
+              onClick={() => setDisplayMode('open_text')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                displayMode === 'open_text'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Teks terbuka penuh, disorot secara live saat dibaca"
+            >
+              <Eye className="w-3.5 h-3.5 text-blue-300" />
+              <span>Teks Terbuka (Mushaf)</span>
+            </button>
+          </div>
+
+          {/* Audio Waveform & Status Indicator */}
+          <div className="flex items-center gap-4">
+            {/* Live Animated Waveform */}
+            <div className="flex items-center gap-1 h-6 px-2 bg-slate-800/80 rounded-xl border border-slate-700/60">
+              <span className={`w-1 rounded-full transition-all duration-150 ${isListening ? 'h-5 bg-emerald-400 animate-pulse' : 'h-1.5 bg-slate-600'}`} />
+              <span className={`w-1 rounded-full transition-all duration-200 ${isListening ? 'h-3.5 bg-teal-400 animate-bounce' : 'h-1.5 bg-slate-600'}`} />
+              <span className={`w-1 rounded-full transition-all duration-150 ${isListening ? 'h-6 bg-emerald-300 animate-pulse' : 'h-1.5 bg-slate-600'}`} />
+              <span className={`w-1 rounded-full transition-all duration-300 ${isListening ? 'h-4 bg-teal-300 animate-bounce' : 'h-1.5 bg-slate-600'}`} />
+              <span className={`w-1 rounded-full transition-all duration-150 ${isListening ? 'h-2 bg-emerald-400 animate-pulse' : 'h-1.5 bg-slate-600'}`} />
+              <span className="text-[10px] font-bold text-slate-300 ml-1">
+                {isListening ? 'Mendengarkan...' : 'Siaga'}
+              </span>
+            </div>
+
+            {/* Session Stats */}
+            <div className="flex items-center gap-2 text-[11px] text-slate-300">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-slate-400" />
+                {formatTime(sessionSeconds)}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                <Award className="w-3.5 h-3.5" />
+                {totalMemorizedInSession} Terhafal
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* SETTINGS DRAWER (Sensitivitas, Qari, Toleransi) */}
         {showSettings && (
-          <div className="px-6 py-3.5 bg-emerald-50/90 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-900/60 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 animate-in slide-in-from-top-2 duration-150">
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-emerald-900 dark:text-emerald-300">Tingkat Ketelitian Suara:</span>
+          <div className="px-6 py-3.5 bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-900/60 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 animate-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold text-emerald-950 dark:text-emerald-300">Akurasi & Tashih AI:</span>
               <div className="inline-flex rounded-xl bg-white dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700">
                 <button
-                  onClick={() => setSensitivity('ramah_anak')}
-                  className={`px-3 py-1 rounded-lg font-bold transition ${
-                    sensitivity === 'ramah_anak'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600'
-                  }`}
-                >
-                  🌱 Ramah Anak (60%)
-                </button>
-                <button
-                  onClick={() => setSensitivity('standar')}
-                  className={`px-3 py-1 rounded-lg font-bold transition ${
-                    sensitivity === 'standar'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600'
-                  }`}
-                >
-                  ⚖️ Standar (70%)
-                </button>
-                <button
                   onClick={() => setSensitivity('ketat')}
-                  className={`px-3 py-1 rounded-lg font-bold transition ${
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
                     sensitivity === 'ketat'
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600'
                   }`}
+                  title="Wajib tepat seluruh huruf & kata (Akurasi 90%+ ala Tarteel Strict)"
                 >
-                  🎯 Teliti / Ujian (80%)
+                  🎯 Ujian Ketat (Tarteel 90%+)
+                </button>
+                <button
+                  onClick={() => setSensitivity('standar')}
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    sensitivity === 'standar'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600'
+                  }`}
+                  title="Akurasi standar seimbang (80%)"
+                >
+                  ⚖️ Standar (80%)
+                </button>
+                <button
+                  onClick={() => setSensitivity('ramah_anak')}
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    sensitivity === 'ramah_anak'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600'
+                  }`}
+                  title="Toleransi pengucapan anak-anak pemula (70%)"
+                >
+                  👶 Ramah Santri Cilik (70%)
                 </button>
               </div>
             </div>
 
+            {/* Reciter for Audio Reference */}
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-slate-700 dark:text-slate-300">Qari Bantuan Audio:</span>
+              <span className="font-extrabold text-emerald-950 dark:text-emerald-300">Ustadz / Qari:</span>
               <select
                 value={selectedReciter}
                 onChange={(e) => setSelectedReciter(e.target.value)}
-                className="py-1 px-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200 focus:outline-none"
+                className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-semibold focus:outline-none"
               >
                 {RECITERS_LIST.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -553,42 +757,94 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
           </div>
         )}
 
-        {/* REAL-TIME STATUS BAR */}
-        <div className="px-5 sm:px-6 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2 text-xs flex-wrap">
-            <span className="font-bold text-slate-500">Posisi Bacaan:</span>
-            <span className="px-3 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-black">
-              Ayat {activeAyahIndex + 1} dari {surah.totalAyat}
-            </span>
+        {/* PRIMARY ACTION BAR: MIC TOGGLE & PEEK BUTTON */}
+        <div className="px-5 sm:px-6 py-3 bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-xs">
+          {/* Mic Button & Start Reciting */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={isListening ? stopContinuousListening : startContinuousListening}
+              className={`flex items-center gap-2.5 px-5 py-2.5 rounded-2xl font-black text-sm shadow-md transition transform active:scale-95 cursor-pointer ${
+                isListening
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white ring-4 ring-rose-500/20 animate-pulse'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white ring-4 ring-emerald-500/20'
+              }`}
+            >
+              {isListening ? (
+                <>
+                  <MicOff className="w-5 h-5 text-rose-200" />
+                  <span>Jeda Mikrofon</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="w-5 h-5 text-amber-300 animate-bounce" />
+                  <span>Mulai Hafalan Suara 🎙️</span>
+                </>
+              )}
+            </button>
 
-            {isWrongLocked ? (
-              <span className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 font-black animate-pulse border border-red-300 dark:border-red-800">
-                <Lock className="w-3.5 h-3.5" />
-                <span>Ayat Terhenti & Terkunci (Salah)</span>
-              </span>
-            ) : isListening ? (
-              <span className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 font-black border border-teal-300 dark:border-teal-800">
-                <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Mendengarkan Live (Hands-Free)</span>
-              </span>
-            ) : (
-              <span className="text-slate-400 italic">Mikrofon belum diaktifkan</span>
+            {/* PEEK BUTTON (Intip Ayat - Tarteel Signature Feature) */}
+            {displayMode === 'blind_hidden' && (
+              <button
+                onClick={handleTriggerPeek}
+                disabled={isPeekingCurrentAyah}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-extrabold transition cursor-pointer border ${
+                  isPeekingCurrentAyah
+                    ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 text-amber-800 dark:text-amber-300'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-amber-700'
+                }`}
+                title="Intip ayat selama 4 detik jika lupa hafalan"
+              >
+                <Eye className="w-4 h-4 text-amber-500" />
+                <span>
+                  {isPeekingCurrentAyah ? `Mengintip (${peekCountdown}s)...` : 'Intip Ayat (4 Detik)'}
+                </span>
+              </button>
             )}
+
+            {/* Listen to Sheikh */}
+            <button
+              onClick={() => handlePlaySheikhHelp()}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 text-teal-800 dark:text-teal-300 text-xs font-bold transition border border-teal-200 dark:border-teal-800 cursor-pointer"
+              title="Dengarkan murottal Ustadz sebagai panduan makhraj"
+            >
+              <Volume2 className={`w-4 h-4 text-teal-600 ${isPlayingSheikhHint ? 'animate-pulse' : ''}`} />
+              <span>{isPlayingSheikhHint ? 'Hentikan Audio' : 'Dengar Ustadz'}</span>
+            </button>
           </div>
 
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 font-extrabold bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1 rounded-xl border border-orange-200 dark:border-orange-900/50">
-              <Flame className="w-4 h-4 fill-orange-500" />
-              <span>{consecutiveCount} Ayat Lancar Berturut</span>
-            </div>
+          {/* Quick Simulation Menu (For Fast Testing or Desktop Browsers) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold text-slate-400 hidden xl:inline">Uji Coba:</span>
+            <button
+              onClick={() => handleSimulateRecitation('correct')}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold transition border border-emerald-300 dark:border-emerald-800 cursor-pointer"
+              title="Simulasikan bacaan benar: ayat terbuka & lanjut otomatis"
+            >
+              ▶️ Baca Benar (Buka Ayat)
+            </button>
+
+            <button
+              onClick={() => handleSimulateRecitation('wrong_word')}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-800 dark:text-rose-300 text-[11px] font-bold transition border border-rose-300 dark:border-rose-800 cursor-pointer"
+              title="Simulasikan salah kata tengah: terkunci & beri koreksi"
+            >
+              ▶️ Salah Kata (Terkunci)
+            </button>
+
+            <button
+              onClick={() => handleSimulateRecitation('ending_only')}
+              className="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-300 text-[11px] font-bold transition border border-amber-300 dark:border-amber-800 cursor-pointer"
+              title="Simulasikan hanya baca akhiran: harus ditolak tidak boleh lanjut"
+            >
+              ▶️ Baca Akhir Saja (Tolak)
+            </button>
 
             <button
               onClick={handleRestartSurah}
-              className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition font-bold px-2 py-1 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700"
-              title="Ulangi dari Ayat 1"
+              className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer"
+              title="Reset ke Ayat 1"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Reset</span>
+              <RotateCcw className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -596,9 +852,9 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
         {/* FEEDBACK & TRANSCRIPT BANNER */}
         <div className={`px-5 sm:px-6 py-2.5 border-b text-xs transition-colors shrink-0 flex items-center justify-between gap-3 ${
           isWrongLocked 
-            ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-900/60 text-rose-900 dark:text-rose-200 font-medium'
+            ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-300 dark:border-rose-900/60 text-rose-900 dark:text-rose-200'
             : isListening
-            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200 font-medium'
+            ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200'
             : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
         }`}>
           <div className="flex items-center gap-2 truncate">
@@ -616,18 +872,118 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
           </div>
 
           {liveTranscript && (
-            <div className="shrink-0 bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 max-w-[240px] truncate text-[11px] font-bold shadow-xs">
+            <div className="shrink-0 bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 max-w-[280px] truncate text-[11px] font-bold shadow-xs">
               Terdengar: <span className="text-emerald-600 dark:text-emerald-400">"{liveTranscript}"</span>
             </div>
           )}
         </div>
 
-        {/* SCROLLABLE QURAN AYAT LIST */}
+        {/* ERROR DIAGNOSTICS CARD (If User Made a Mistake) */}
+        {isWrongLocked && errorDetail && (
+          <div className="px-5 sm:px-6 py-3 bg-rose-100/90 dark:bg-rose-950/70 border-b border-rose-300 dark:border-rose-800 text-xs shrink-0 flex flex-wrap items-center justify-between gap-3 animate-in slide-in-from-top-1 duration-150">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-rose-900 dark:text-rose-200">
+                  🔴 KOREKSI KATA KE-{errorDetail.wordIndex + 1}:
+                </span>
+                <span className="font-arabic font-bold text-base text-rose-950 dark:text-white bg-white/70 dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-rose-300">
+                  {errorDetail.expectedWord}
+                </span>
+                {errorDetail.heardWord && (
+                  <span className="text-rose-700 dark:text-rose-300">
+                    (Yang diucapkan: <span className="font-bold underline">"{errorDetail.heardWord}"</span>)
+                  </span>
+                )}
+              </div>
+              <p className="text-rose-800 dark:text-rose-300 text-[11px]">
+                Ayat terkunci dan tidak akan lanjut sampai kamu membacakan seluruh ayat dari awal sampai akhir dengan makhraj yang tepat.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePlaySheikhHelp(currentAyah.ayahNumber)}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-rose-900 dark:text-rose-200 font-bold border border-rose-300 hover:bg-rose-50 transition cursor-pointer"
+              >
+                🔊 Dengarkan Contoh Benar
+              </button>
+              <button
+                onClick={handleSkipAyah}
+                className="px-3 py-1.5 rounded-xl bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-100 font-bold hover:bg-rose-300 transition cursor-pointer"
+              >
+                Lewati Ayat Ini
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* SCROLLABLE QURAN AYAT LIST (TARTEEL AI REVEAL & BLIND MECHANIC) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-slate-800 dark:text-slate-100 scroll-smooth">
           {isLoadingSurah ? (
             <div className="py-24 text-center space-y-3">
               <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-xs text-slate-400 font-bold">Memuat Surat {surah.nameLatin || selectedSurahId}...</p>
+            </div>
+          ) : isSurahCompleted ? (
+            /* KHATAM / COMPLETED SCREEN */
+            <div className="py-12 px-4 max-w-lg mx-auto text-center space-y-6 animate-in zoom-in-95 duration-300">
+              <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-amber-400 via-emerald-500 to-teal-400 p-1 flex items-center justify-center shadow-2xl shadow-emerald-500/30">
+                <div className="w-full h-full bg-white dark:bg-slate-900 rounded-[22px] flex items-center justify-center text-5xl">
+                  🏆
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-xs uppercase tracking-widest font-black px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300">
+                  🎉 Khatam Hafalan Surat
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                  Alhamdulillah! Selesai Surat {surah.nameLatin}
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Masya Allah, seluruh {surah.totalAyat} ayat berhasil kamu hafal dan lafalkan dengan tartil dan lancar!
+                </p>
+              </div>
+
+              {/* Stats Card */}
+              <div className="grid grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Ayat Terhafal</span>
+                  <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{surah.totalAyat} / {surah.totalAyat}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Durasi Hafalan</span>
+                  <p className="text-xl font-black text-teal-600 dark:text-teal-400">{formatTime(sessionSeconds)}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Bonus XP</span>
+                  <p className="text-xl font-black text-amber-500">+100 XP</p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                <button
+                  onClick={handleRestartSurah}
+                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-sm transition cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Ulangi Surat Ini</span>
+                </button>
+
+                {selectedSurahId < 114 && (
+                  <button
+                    onClick={() => {
+                      setSelectedSurahId((id) => id + 1);
+                      setActiveAyahIndex(0);
+                    }}
+                    className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/25 transition cursor-pointer"
+                  >
+                    <span>Lanjut Surat Berikutnya</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             surah.ayat.map((ayah, idx) => {
@@ -635,6 +991,25 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
               const status = ayahStatuses[ayah.ayahNumber] || (isActive ? 'active' : 'pending');
               const isCorrect = status === 'correct';
               const isWrong = isActive && isWrongLocked;
+
+              // Determine text visibility based on displayMode
+              // In Blind mode:
+              // - If correct: ALWAYS VISIBLE (revealed)
+              // - If active & peeking: VISIBLE
+              // - If not correct & hidden mode: VEILED / CONCEALED
+              const isHidden = 
+                displayMode === 'blind_hidden' && 
+                !isCorrect && 
+                !(isActive && isPeekingCurrentAyah);
+
+              const isFirstWordOnly = 
+                displayMode === 'first_word' && 
+                !isCorrect && 
+                !(isActive && isPeekingCurrentAyah);
+
+              const words = ayah.textArabic.split(' ');
+              const firstWord = words[0] || '';
+              const remainingWordsCount = Math.max(0, words.length - 1);
 
               return (
                 <div
@@ -646,12 +1021,12 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                         ? 'bg-rose-50/95 dark:bg-rose-950/40 border-rose-500 shadow-2xl shadow-rose-600/15 scale-[1.01] ring-4 ring-rose-500/20'
                         : 'bg-emerald-50/95 dark:bg-emerald-950/40 border-emerald-500 shadow-2xl shadow-emerald-600/15 scale-[1.01] ring-4 ring-emerald-500/20'
                       : isCorrect
-                      ? 'bg-white dark:bg-slate-850 border-emerald-300 dark:border-emerald-800/80 opacity-90'
+                      ? 'bg-white dark:bg-slate-850 border-emerald-300 dark:border-emerald-800/80'
                       : 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-800 opacity-60'
                   }`}
                 >
                   {/* Status Ribbon Header */}
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <span className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center transition-all ${
                         isCorrect
@@ -665,12 +1040,12 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                         {ayah.ayahNumber}
                       </span>
 
-                      <span className="text-xs font-black">
+                      <span className="text-xs font-black text-slate-900 dark:text-white">
                         Ayat {ayah.ayahNumber}
                       </span>
 
                       {isActive && (
-                        <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+                        <span className="text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/30">
                           Target Sekarang
                         </span>
                       )}
@@ -680,21 +1055,25 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                       {isCorrect && (
                         <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs border border-emerald-300 dark:border-emerald-800">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Lancar ✓ (Ayat Jalan)</span>
+                          <span>Terbuka & Lancar ✓</span>
                         </span>
                       )}
 
                       {isWrong && (
                         <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 font-extrabold text-xs border border-rose-300 dark:border-rose-800 animate-pulse">
                           <Lock className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Terkunci 🔒 (Tidak Jalan)</span>
+                          <span>Terkunci 🔒 (Perbaiki Lafadz)</span>
                         </span>
                       )}
 
                       {isActive && !isWrong && !isCorrect && (
                         <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 font-extrabold text-xs animate-pulse border border-teal-300 dark:border-teal-800">
                           <span className="w-2 h-2 rounded-full bg-teal-500 animate-ping" />
-                          <span>Silakan Baca Sekarang...</span>
+                          <span>
+                            {displayMode === 'blind_hidden'
+                              ? 'Lafalkan dari Ingatan...'
+                              : 'Silakan Baca Sekarang...'}
+                          </span>
                         </span>
                       )}
 
@@ -706,7 +1085,7 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                           title="Dengarkan bantuan bacaan Syaikh"
                         >
                           <Volume2 className={`w-3.5 h-3.5 text-emerald-600 ${isPlayingSheikhHint ? 'animate-pulse text-teal-600' : ''}`} />
-                          <span className="hidden sm:inline">Bantuan Syaikh</span>
+                          <span className="hidden sm:inline">Bantuan Ustadz</span>
                         </button>
                       )}
 
@@ -724,149 +1103,108 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
                     </div>
                   </div>
 
-                  {/* Arabic Text Display */}
-                  <div className="text-right py-3">
-                    <p className={`font-arabic text-2xl sm:text-3xl leading-loose select-none font-medium transition-colors ${
-                      isWrong
-                        ? 'text-rose-950 dark:text-rose-200'
-                        : isCorrect
-                        ? 'text-emerald-900 dark:text-emerald-200 font-semibold'
-                        : isActive
-                        ? 'text-slate-900 dark:text-white font-semibold'
-                        : 'text-slate-700 dark:text-slate-300'
-                    }`}>
-                      {ayah.textArabic}
-                    </p>
-                  </div>
-
-                  {/* Latin & Indonesian Translation */}
-                  <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
-                    <p className="text-xs sm:text-sm italic font-serif text-slate-700 dark:text-slate-300">
-                      "{ayah.textLatin}"
-                    </p>
-                    <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
-                      {ayah.translationId}
-                    </p>
-                  </div>
-
-                  {/* Wrong Ayah Explicit Instruction Box */}
-                  {isWrong && (
-                    <div className="mt-3 p-3 rounded-2xl bg-rose-100/90 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-900/60 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between gap-3 animate-in fade-in">
-                      <div className="flex items-center gap-2">
-                        <Lock className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>
-                          <strong>Ayat tidak akan bergeser maju</strong> sampai kamu membaca lafadz ayat ini dengan tepat. Dengarkan bantuan Syaikh lalu ulangi lisanmu!
-                        </span>
+                  {/* ARABIC TEXT DISPLAY (BLIND / REVEAL MECHANIC) */}
+                  <div className="py-4 relative">
+                    {isHidden ? (
+                      /* BLIND VEIL: Hidden Ayah with Mystery Card & Lock */
+                      <div className="py-8 px-6 rounded-2xl bg-gradient-to-r from-emerald-950/10 via-teal-950/15 to-emerald-950/10 dark:from-slate-900/80 dark:to-slate-900/80 border border-emerald-500/20 backdrop-blur-md flex flex-col items-center justify-center text-center space-y-2 select-none group">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-700 dark:text-emerald-300 text-xl shadow-inner border border-emerald-500/30">
+                          <Lock className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <p className="font-extrabold text-sm text-slate-800 dark:text-slate-200">
+                          Ayat {ayah.ayahNumber} Disembunyikan (Uji Hafalan)
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+                          Bacakan ayat ini dengan suara lantang ke mikrofon. Ketika bacaanmu benar, ayat akan <strong>terbuka otomatis dengan kilau keemasan</strong>!
+                        </p>
+                        {isActive && (
+                          <button
+                            onClick={handleTriggerPeek}
+                            className="mt-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Lupa ayatnya? Klik untuk intip 4 detik</span>
+                          </button>
+                        )}
                       </div>
-                      <button
-                        onClick={() => handlePlaySheikhHelp(ayah.ayahNumber)}
-                        className="shrink-0 px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs transition cursor-pointer"
-                      >
-                        Dengar Syaikh 🔊
-                      </button>
+                    ) : isFirstWordOnly ? (
+                      /* FIRST WORD CLUE MODE */
+                      <div className="py-4 px-6 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-400">
+                          +{remainingWordsCount} kata selanjutnya disembunyikan
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-400 font-arabic">...</span>
+                          <span className="font-arabic text-2xl sm:text-3xl text-emerald-700 dark:text-emerald-400 font-bold">
+                            {firstWord}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      /* OPEN / REVEALED TEXT */
+                      <div className="text-right">
+                        <p className={`font-arabic text-2xl sm:text-3xl leading-loose select-none font-medium transition-all ${
+                          isWrong
+                            ? 'text-rose-950 dark:text-rose-200'
+                            : isCorrect
+                            ? 'text-emerald-900 dark:text-emerald-200 font-semibold'
+                            : isActive
+                            ? 'text-slate-900 dark:text-white font-semibold'
+                            : 'text-slate-700 dark:text-slate-300'
+                        }`}>
+                          {ayah.textArabic}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* LATIN & TRANSLATION (Only if revealed or open mode) */}
+                  {!isHidden && (
+                    <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
+                      <p className="text-xs sm:text-sm italic font-serif text-slate-700 dark:text-slate-300">
+                        "{ayah.textLatin}"
+                      </p>
+                      <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                        {ayah.translationId}
+                      </p>
                     </div>
                   )}
                 </div>
               );
             })
           )}
-
-          {/* Surah Khatam Banner */}
-          {isSurahCompleted && (
-            <div className="p-8 rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-center space-y-4 shadow-2xl animate-in zoom-in-95">
-              <span className="text-5xl block animate-bounce">👑</span>
-              <h3 className="text-2xl font-black">Alhamdulillah, Khatam Surat {surah.nameLatin}!</h3>
-              <p className="text-xs sm:text-sm text-emerald-100 max-w-lg mx-auto leading-relaxed">
-                Hebat sekali! Kamu berhasil membaca seluruh <strong>{surah.totalAyat} ayat</strong> secara berurutan dan mengalir dari awal hingga akhir dengan suaramu sendiri!
-              </p>
-
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={handleRestartSurah}
-                  className="px-6 py-2.5 rounded-2xl bg-white text-emerald-800 font-black text-xs sm:text-sm shadow-md hover:bg-emerald-50 transition cursor-pointer"
-                >
-                  Ulangi Surat Ini Sekali Lagi 🔄
-                </button>
-
-                {selectedSurahId < 114 && (
-                  <button
-                    onClick={() => {
-                      setSelectedSurahId(selectedSurahId + 1);
-                      setActiveAyahIndex(0);
-                    }}
-                    className="px-6 py-2.5 rounded-2xl bg-emerald-900/60 hover:bg-emerald-900/80 text-white font-black text-xs sm:text-sm border border-white/20 transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span>Lanjut Surat Berikutnya</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* BOTTOM CONTROLLER & DEMO BAR */}
-        <div className="px-5 sm:px-6 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          {/* Main Continuous Mic Toggle Button */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              onClick={() => {
-                if (isListening) {
-                  stopContinuousListening();
-                } else {
-                  startContinuousListening();
-                }
-              }}
-              className={`flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl font-black text-xs sm:text-sm shadow-lg transition transform active:scale-95 cursor-pointer ${
-                isListening
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30 ring-4 ring-rose-500/20 animate-pulse'
-                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30'
-              }`}
-            >
-              {isListening ? (
-                <>
-                  <MicOff className="w-5 h-5" />
-                  <span>Hentikan Mikrofon</span>
-                </>
-              ) : (
-                <>
-                  <Mic className="w-5 h-5 animate-pulse" />
-                  <span>Mulai Baca Berjalan (Hands-Free)</span>
-                </>
-              )}
-            </button>
-
-            {/* Quick Demonstration Simulation Buttons */}
-            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-850 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-              <span className="text-[10px] font-extrabold text-slate-400 px-2 hidden sm:inline">
-                Uji Coba:
-              </span>
-
-              <button
-                onClick={() => handleEvaluateSpokenAyah(currentAyah.textArabic, true)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-extrabold text-xs transition cursor-pointer border border-emerald-300/80"
-                title="Simulasi: Suara membaca benar -> Ayat meluncur jalan ke ayat berikutnya"
-              >
-                <Check className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Simulasi Benar (Ayat Jalan) 🟢</span>
-              </button>
-
-              <button
-                onClick={() => handleEvaluateSpokenAyah("bacaan salah keliru", true)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-900 font-extrabold text-xs transition cursor-pointer border border-rose-300/80"
-                title="Simulasi: Suara membaca salah -> Ayat terkunci dan tidak jalan"
-              >
-                <Lock className="w-3.5 h-3.5 text-rose-700" />
-                <span>Simulasi Salah (Ayat Berhenti) 🔴</span>
-              </button>
+        {/* FOOTER: PROGRESS COUNTER & PROMPT */}
+        <div className="px-5 sm:px-6 py-3 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-800 dark:text-slate-200">
+              Progres Hafalan Surat:
+            </span>
+            <div className="w-28 sm:w-44 h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
+              <div 
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                style={{ width: `${Math.round(((activeAyahIndex + (isSurahCompleted ? 1 : 0)) / (surah.ayat.length || 1)) * 100)}%` }}
+              />
             </div>
+            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+              {Math.round(((activeAyahIndex + (isSurahCompleted ? 1 : 0)) / (surah.ayat.length || 1)) * 100)}%
+            </span>
           </div>
 
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Benar = Jalan 🟢</span>
-            <span className="inline-block w-2 h-2 rounded-full bg-rose-500" />
-            <span>Salah = Tidak Jalan 🔴</span>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-slate-400">
+              Mode: <strong className="text-slate-700 dark:text-slate-300">{displayMode === 'blind_hidden' ? 'Teks Sembunyi' : displayMode === 'first_word' ? 'Kata Awal' : 'Teks Terbuka'}</strong>
+            </span>
+            <button
+              onClick={() => {
+                stopContinuousListening();
+                onClose();
+              }}
+              className="px-4 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition cursor-pointer"
+            >
+              Selesai Sesi
+            </button>
           </div>
         </div>
       </div>

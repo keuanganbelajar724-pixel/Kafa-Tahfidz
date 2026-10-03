@@ -257,10 +257,10 @@ export const SurahDetailView: React.FC<SurahDetailViewProps> = ({
             <button
               onClick={() => onOpenContinuousVoice(surahId, 1)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs font-black shadow-sm transition hover:scale-105 cursor-pointer ring-2 ring-emerald-400/30"
-              title="Membaca Mengalir: Benar = Jalan 🟢 | Salah = Berhenti 🔴"
+              title="Mode Hafalan ala Tarteel AI: Sembunyikan Ayat, Deteksi Suara Real-Time & Koreksi Akurat"
             >
               <Mic className="w-3.5 h-3.5 animate-pulse text-amber-300" />
-              <span>Baca Berjalan</span>
+              <span>Tarteel AI Hafalan ✨</span>
             </button>
           )}
 

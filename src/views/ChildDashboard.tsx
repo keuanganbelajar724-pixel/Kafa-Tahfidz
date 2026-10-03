@@ -219,28 +219,29 @@ export const ChildDashboard: React.FC<ChildDashboardProps> = ({
           </div>
         </div>
 
-        {/* 2.5 SPECIAL FEATURE BANNER: VOICE FOLLOWER & VOICE GATE */}
-        <div className="bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 rounded-3xl p-6 sm:p-7 text-white border-2 border-emerald-500/40 shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5">
+        {/* 2.5 SPECIAL FEATURE BANNER: TARTEEL AI HAFALAN */}
+        <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 rounded-3xl p-6 sm:p-7 text-white border-2 border-emerald-500/40 shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5">
           <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-10 font-arabic text-9xl pointer-events-none select-none">
             🎙️
           </div>
 
           <div className="space-y-3 z-10 relative">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 font-black text-[11px] border border-emerald-400/30">
-                ✨ Fitur Unggulan Interaktif
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 font-black text-[11px] border border-emerald-400/30 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-300" />
+                Hafalan Ala Tarteel AI
               </span>
               <span className="text-xs font-bold text-amber-300">
-                Benar = Jalan 🟢 | Salah = Berhenti 🔴
+                Sembunyikan Ayat 👁️‍🗨️ • Benar = Terbuka & Jalan 🟢
               </span>
             </div>
 
             <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
-              Membaca Mengalir dengan Suara (Voice Follower) 🎙️
+              Mode Hafalan Ala Tarteel AI 🎙️✨
             </h3>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Bacakan ayat Al-Qur'an secara langsung tanpa henti (hands-free)! Jika bacaanmu tepat, <strong>ayat otomatis meluncur maju ke ayat berikutnya</strong> 🟢. Namun jika ada lafadz yang salah, <strong>ayat langsung terkunci dan tidak jalan</strong> 🔴 sampai kamu membaca dengan makhraj yang benar.
+              Uji hafalan seperti di aplikasi Tarteel: <strong>ayat disembunyikan</strong> di balik tirai kabur. Bacakan ayat dari ingatanmu, AI akan mendengarkan real-time. Jika bacaanmu benar, <strong>ayat seketika terbuka berkilau emas dan meluncur ke ayat berikutnya tanpa batas</strong>! Jika keliru satu kata atau huruf, ayat terkunci merah dan AI menunjukkan kata yang salah.
             </p>
           </div>
 
@@ -251,13 +252,14 @@ export const ChildDashboard: React.FC<ChildDashboardProps> = ({
                 className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-white font-black text-sm sm:text-base shadow-xl shadow-emerald-500/30 transition transform hover:scale-[1.01] active:scale-98 cursor-pointer"
               >
                 <Mic className="w-5 h-5 animate-pulse text-amber-300" />
-                <span>Mulai Baca Berjalan (Hands-Free) 🚀</span>
+                <span>Mulai Hafalan Ala Tarteel AI (Hands-Free) 🚀</span>
               </button>
             )}
 
-            <div className="flex items-center justify-between text-xs text-emerald-200/90 font-medium px-1">
-              <span>Tersedia bantuan audio murottal Syaikh</span>
-              <span>Dukung 30 Juz & 114 Surat</span>
+            <div className="flex items-center justify-between text-xs text-emerald-200/90 font-medium px-1 flex-wrap gap-2">
+              <span>👁️ Tombol intip ayat 4 detik</span>
+              <span>18 Ustadz / Qari Dunia</span>
+              <span>30 Juz Lengkap</span>
             </div>
           </div>
         </div>

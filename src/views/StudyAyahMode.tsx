@@ -273,11 +273,11 @@ export const StudyAyahMode: React.FC<StudyAyahModeProps> = ({
           {onOpenContinuousVoice && (
             <button
               onClick={() => onOpenContinuousVoice(surahId, ayahNumber)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs font-black transition hover:scale-105 cursor-pointer shadow-xs"
-              title="Baca Mengalir: Benar = Jalan 🟢 | Salah = Berhenti 🔴"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs font-black transition hover:scale-105 cursor-pointer shadow-xs"
+              title="Mode Hafalan ala Tarteel AI: Sembunyikan Ayat, Deteksi Suara Real-Time & Koreksi Akurat"
             >
               <Mic className="w-3.5 h-3.5 animate-pulse text-amber-300" />
-              <span className="hidden sm:inline">Baca Berjalan</span>
+              <span>Tarteel AI ✨</span>
             </button>
           )}
 

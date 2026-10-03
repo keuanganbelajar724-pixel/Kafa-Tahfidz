@@ -1,9 +1,10 @@
-// Arabic and Phonetic Voice Matching and Tashih Engine
+// Arabic and Phonetic Voice Matching and Tashih Engine (Tarteel AI Style)
 
 export interface WordMatchStatus {
   word: string;
   cleanWord: string;
   status: 'pending' | 'active' | 'correct' | 'wrong';
+  spokenWord?: string;
 }
 
 export type MatchSensitivity = 'strict' | 'standard' | 'lenient';
@@ -90,8 +91,8 @@ export function calculateSimilarity(str1: string, str2: string): number {
 }
 
 /**
- * Match Spoken Recitation with Target Ayah
- * Returns detailed evaluation with accuracy, match status, and whether it passes the gate
+ * Match Spoken Recitation with Target Ayah (Tarteel AI Style Precision)
+ * Strictly evaluates every word in sequence. Never passes if middle words or letters are incorrect!
  */
 export function evaluateAyahVoiceRecitation(
   targetArabic: string,
@@ -105,6 +106,12 @@ export function evaluateAyahVoiceRecitation(
   totalWords: number;
   wordStatuses: WordMatchStatus[];
   feedbackMessage: string;
+  errorDetail?: {
+    wordIndex: number;
+    expectedWord: string;
+    expectedClean: string;
+    heardWord?: string;
+  };
 } {
   const cleanTargetArabic = removeArabicHarakat(targetArabic);
   const cleanSpokenArabic = removeArabicHarakat(spokenText);
@@ -121,11 +128,16 @@ export function evaluateAyahVoiceRecitation(
   const totalWords = targetWordTokens.length;
   let matchedCount = 0;
   let firstWrongIndex = -1;
+  let errorDetail: {
+    wordIndex: number;
+    expectedWord: string;
+    expectedClean: string;
+    heardWord?: string;
+  } | undefined = undefined;
 
-  // Thresholds based on sensitivity
-  // In strict mode, words require high accuracy (>= 85%) and missing words are strictly rejected.
-  const wordThreshold = sensitivity === 'strict' ? 0.85 : sensitivity === 'standard' ? 0.80 : 0.70;
-  const overallThreshold = sensitivity === 'strict' ? 0.82 : sensitivity === 'standard' ? 0.75 : 0.65;
+  // Word-level similarity threshold
+  // In strict mode, words must be >= 0.88 similar to pass (almost exact match)
+  const wordThreshold = sensitivity === 'strict' ? 0.88 : sensitivity === 'standard' ? 0.80 : 0.72;
 
   let spokenCursor = 0;
 
@@ -134,32 +146,41 @@ export function evaluateAyahVoiceRecitation(
     const latinWord = targetLatinTokens[idx] || '';
 
     let matched = false;
+    let matchedSpoken = '';
 
-    // 1. Check in sequence within spoken tokens
-    for (let sIdx = spokenCursor; sIdx < Math.min(spokenWordTokens.length, spokenCursor + 3); sIdx++) {
+    // Check sequentially in spoken tokens starting from current cursor
+    // Restrict lookahead window to prevent random jumps across the verse
+    const lookaheadLimit = Math.min(spokenWordTokens.length, spokenCursor + 2);
+    for (let sIdx = spokenCursor; sIdx < lookaheadLimit; sIdx++) {
       const spoken = spokenWordTokens[sIdx];
       if (spoken === cleanWord) {
         matched = true;
+        matchedSpoken = spoken;
         spokenCursor = sIdx + 1;
         break;
       }
-      if (cleanWord.length >= 3 && calculateSimilarity(spoken, cleanWord) >= wordThreshold) {
+      if (cleanWord.length >= 2 && calculateSimilarity(spoken, cleanWord) >= wordThreshold) {
         matched = true;
+        matchedSpoken = spoken;
         spokenCursor = sIdx + 1;
         break;
       }
     }
 
-    // 2. Check Latin phonetic match if Arabic didn't match
+    // Secondary Latin phonetic fallback check
     if (!matched && latinWord) {
-      for (let sIdx = 0; sIdx < spokenLatinTokens.length; sIdx++) {
+      for (let sIdx = spokenCursor; sIdx < Math.min(spokenLatinTokens.length, spokenCursor + 2); sIdx++) {
         const spoken = spokenLatinTokens[sIdx];
         if (spoken === latinWord) {
           matched = true;
+          matchedSpoken = spoken;
+          spokenCursor = sIdx + 1;
           break;
         }
         if (latinWord.length >= 3 && calculateSimilarity(spoken, latinWord) >= wordThreshold) {
           matched = true;
+          matchedSpoken = spoken;
+          spokenCursor = sIdx + 1;
           break;
         }
       }
@@ -167,9 +188,18 @@ export function evaluateAyahVoiceRecitation(
 
     if (matched) {
       matchedCount++;
-      return { word, cleanWord, status: 'correct' };
+      return { word, cleanWord, status: 'correct', spokenWord: matchedSpoken };
     } else {
-      if (firstWrongIndex === -1) firstWrongIndex = idx;
+      if (firstWrongIndex === -1) {
+        firstWrongIndex = idx;
+        const heard = spokenWordTokens[spokenCursor] || spokenLatinTokens[spokenCursor];
+        errorDetail = {
+          wordIndex: idx,
+          expectedWord: word,
+          expectedClean: cleanWord,
+          heardWord: heard,
+        };
+      }
       return { word, cleanWord, status: 'wrong' };
     }
   });
@@ -179,41 +209,52 @@ export function evaluateAyahVoiceRecitation(
   const latinSimilarity = calculateSimilarity(cleanTargetLatin, cleanSpokenLatin);
   const bestSimilarity = Math.max(arabicSimilarity, latinSimilarity);
 
-  // Strict Evaluation:
-  // If user made a mistake in letters/words, it must NOT pass just because the ending was correct!
+  // Strict Evaluation to eliminate false positives:
+  // If user only read the last word, matchedCount will only be 1 out of totalWords!
+  // In Tarteel AI, the recitation MUST cover the entire verse accurately from start to finish!
   const wordRatio = totalWords > 0 ? matchedCount / totalWords : 0;
   
   let isCorrect = false;
   if (sensitivity === 'strict') {
-    // In strict mode: All words must match (or at least 90% if very long verse) AND overall similarity >= 82%
-    isCorrect = totalWords <= 4 
-      ? matchedCount === totalWords && bestSimilarity >= 0.80
-      : wordRatio >= 0.90 && bestSimilarity >= 0.80;
+    // In strict mode: 100% of words must match if totalWords <= 5.
+    // If long verse (> 5 words), must match at least 95% of words AND overall similarity >= 0.85.
+    isCorrect = totalWords <= 5 
+      ? matchedCount === totalWords && bestSimilarity >= 0.82
+      : wordRatio >= 0.92 && bestSimilarity >= 0.82 && matchedCount >= totalWords - 1;
   } else if (sensitivity === 'standard') {
-    isCorrect = wordRatio >= 0.80 && bestSimilarity >= 0.75;
+    isCorrect = totalWords <= 3
+      ? matchedCount === totalWords && bestSimilarity >= 0.75
+      : wordRatio >= 0.85 && bestSimilarity >= 0.75;
   } else {
-    isCorrect = wordRatio >= 0.70 || bestSimilarity >= 0.65;
+    // Lenient mode (for young children)
+    isCorrect = wordRatio >= 0.75 && bestSimilarity >= 0.65;
   }
 
-  const score = Math.round(Math.max(wordRatio * 100, bestSimilarity * 100));
+  // Calculate clean score
+  const score = Math.round(Math.min(100, Math.max(0, (wordRatio * 0.7 + bestSimilarity * 0.3) * 100)));
 
   let feedbackMessage = '';
   if (isCorrect) {
-    feedbackMessage = '🌟 Masya Allah! Seluruh Lafadz Tepat, Tartil & Fasih. Gembok Terbuka! 🔓';
+    feedbackMessage = '🌟 Masya Allah! Seluruh lafadz ayat tepat, tartil & fasih. Ayat terbuka dan lanjut! 🔓';
   } else {
     if (firstWrongIndex !== -1 && rawWords[firstWrongIndex]) {
-      feedbackMessage = `⛔ Lafadz kata ke-${firstWrongIndex + 1} ("${rawWords[firstWrongIndex]}") keliru atau belum lengkap. Harap baca seluruh ayat dengan teliti dari awal sampai akhir!`;
+      const wrongWord = rawWords[firstWrongIndex];
+      feedbackMessage = `⛔ Kata ke-${firstWrongIndex + 1} ("${wrongWord}") keliru atau belum terbaca. Harap baca seluruh ayat dengan teliti dari awal sampai akhir!`;
+    } else if (spokenWordTokens.length < totalWords) {
+      feedbackMessage = `⚠️ Bacaan belum selesai (${spokenWordTokens.length}/${totalWords} kata terdeteksi). Harap bacakan ayat sampai tuntas!`;
     } else {
-      feedbackMessage = '⚠️ Bacaan belum tepat atau ada huruf/kata yang terlewat. Silakan ulangi ayat ini dengan benar untuk membuka ayat berikutnya!';
+      feedbackMessage = '⚠️ Ada huruf atau kata yang belum sesuai makhraj. Silakan ulangi ayat ini dengan benar untuk membuka ayat berikutnya!';
     }
   }
 
   return {
     isCorrect,
-    score: Math.min(100, Math.max(0, score)),
+    score,
     matchedCount,
     totalWords,
     wordStatuses,
     feedbackMessage,
+    errorDetail,
   };
 }
+
