@@ -10,7 +10,7 @@ import {
   RECITERS_LIST
 } from '../services/quranService';
 import { soundEffects } from '../utils/soundEffects';
-import { evaluateAyahVoiceRecitation, removeArabicHarakat, WordMatchStatus } from '../utils/arabicVoiceMatcher';
+import { evaluateAyahVoiceRecitation, removeArabicHarakat, WordMatchStatus, MatchSensitivity } from '../utils/arabicVoiceMatcher';
 import { 
   X, 
   Mic, 
@@ -280,10 +280,12 @@ export const ContinuousVoiceFollowerModal: React.FC<ContinuousVoiceFollowerModal
   const handleEvaluateSpokenAyah = (spokenText: string, isFinal = false) => {
     if (!currentAyah || isAdvancingRef.current) return;
 
+    const matchSens: MatchSensitivity = sensitivity === 'ketat' ? 'strict' : sensitivity === 'standar' ? 'standard' : 'lenient';
     const evalResult = evaluateAyahVoiceRecitation(
       currentAyah.textArabic,
       currentAyah.textLatin,
-      spokenText
+      spokenText,
+      matchSens
     );
 
     // Apply sensitivity tolerance

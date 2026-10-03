@@ -11,7 +11,12 @@ import {
 } from '../services/quranService';
 import { ALL_114_SURAHS, JUZ_30_INFO_LIST } from '../data/quran30JuzData';
 import { soundEffects } from '../utils/soundEffects';
-import { evaluateAyahVoiceRecitation, removeArabicHarakat, WordMatchStatus } from '../utils/arabicVoiceMatcher';
+import { 
+  evaluateAyahVoiceRecitation, 
+  removeArabicHarakat, 
+  WordMatchStatus, 
+  MatchSensitivity 
+} from '../utils/arabicVoiceMatcher';
 import { 
   Mic, 
   MicOff, 
@@ -37,7 +42,9 @@ import {
   BookOpen,
   Filter,
   Check,
-  Compass
+  Compass,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface VoiceRecitationGateModalProps {
@@ -49,7 +56,7 @@ interface VoiceRecitationGateModalProps {
   onOpenContinuousVoice?: (surahId?: number, ayahNumber?: number) => void;
 }
 
-type GateMode = 'verse_by_verse' | 'finish_ayah' | 'random_ayah';
+type GateMode = 'verse_by_verse' | 'finish_ayah';
 
 export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> = ({
   isOpen,
@@ -89,6 +96,16 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
   // Gate Game Mode
   const [gateMode, setGateMode] = useState<GateMode>('verse_by_verse');
 
+  // Blind Mode (Ayat Tidak Tampak, Terbuka Jika Benar) - Default TRUE as requested
+  const [isBlindMode, setIsBlindMode] = useState<boolean>(true);
+  const [isPeeking, setIsPeeking] = useState<boolean>(false);
+
+  // Auto-Continue Next Surah Mode (Lanjut Terus Tanpa Berhenti di 5 Ayat / Selesai Surat)
+  const [autoContinueNextSurah, setAutoContinueNextSurah] = useState<boolean>(true);
+
+  // Match Sensitivity (Default strict / teliti 90% so wrong letters won't pass!)
+  const [sensitivity, setSensitivity] = useState<MatchSensitivity>('strict');
+
   // Voice Recognition State
   const [isListening, setIsListening] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState('');
@@ -113,6 +130,10 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
   // Surahs filtered by selected Juz
   const surahsInSelectedJuz = getAllSurahCatalog(selectedJuz);
   const allJuzList = getAllJuzList();
+
+  // Next Surah Information for continuous flow
+  const nextSurahId = selectedSurahId < 114 ? selectedSurahId + 1 : 1;
+  const nextSurahCatalog = getAllSurahCatalog().find((s) => s.id === nextSurahId);
 
   // Initialize or update Surah when selectedSurahId changes
   useEffect(() => {
@@ -143,6 +164,7 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
     setLiveTranscript('');
     setMistakeCountInCurrentAyah(0);
     setIsFinishedSurah(false);
+    setIsPeeking(false);
 
     return () => {
       mounted = false;
@@ -195,58 +217,64 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
     }
     setGateState('idle');
     setLiveTranscript('');
-    setFeedbackMessage('Klik tombol mikrofon di bawah lalu bacakan ayat ini!');
-  }, [currentAyahIndex, surah]);
+    setIsPeeking(false);
+    setFeedbackMessage(
+      isBlindMode
+        ? '🙈 Mode Uji Gaib Aktif: Ayat disembunyikan. Bacakan langsung dari ingatan!'
+        : 'Klik tombol mikrofon di bawah lalu bacakan ayat ini!'
+    );
+  }, [currentAyahIndex, surah, isBlindMode]);
 
-  // Cleanup on unmount
+  // Cleanup speech recognition on unmount
   useEffect(() => {
     return () => {
-      stopListening();
-      if (audioRef.current) audioRef.current.pause();
-      if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      if (autoAdvanceTimeoutRef.current) {
+        clearTimeout(autoAdvanceTimeoutRef.current);
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
     };
   }, []);
 
-  // Web Speech Recognition Engine
+  // Web Speech API Voice Recognition
   const startListening = () => {
-    setRecognitionError(null);
-    setLiveTranscript('');
-
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setRecognitionError(
-        'Browser belum mendukung Web Speech API secara native. Anda tetap bisa menggunakan tombol Simulasi Suara di bawah!'
+        'Browser Anda belum mendukung input suara Web Speech API. Gunakan Google Chrome atau Edge, atau gunakan tombol simulasi suara di bawah.'
       );
       return;
     }
 
     try {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {}
-      }
+      setRecognitionError(null);
+      setLiveTranscript('');
+      setGateState('listening');
+      setIsListening(true);
 
       const recognition = new SpeechRecognition();
-      recognition.continuous = true;
+      recognition.lang = 'ar-SA';
+      recognition.continuous = false;
       recognition.interimResults = true;
-      recognition.lang = 'ar-SA'; // Arabic (Saudi Arabia)
       recognition.maxAlternatives = 3;
 
       recognition.onstart = () => {
         setIsListening(true);
-        setGateState('listening');
-        soundEffects.playListeningPing();
-        setFeedbackMessage('🎤 Sedang mendengarkan bacaanmu... Bacakan ayat dengan tartil!');
       };
 
       recognition.onresult = (event: any) => {
-        let finalTranscript = '';
         let interimTranscript = '';
+        let finalTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
@@ -291,7 +319,7 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
     setIsListening(false);
   };
 
-  // Evaluate the spoken recitation against current target verse
+  // Evaluate the spoken recitation against current target verse with strict accuracy
   const handleVoiceEvaluation = (spokenText: string) => {
     let targetArabic = currentAyah.textArabic;
     let targetLatin = currentAyah.textLatin;
@@ -303,10 +331,15 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
       targetLatin = currentAyah.textLatin.split(/\s+/).slice(halfIndex).join(' ');
     }
 
-    const evalResult = evaluateAyahVoiceRecitation(targetArabic, targetLatin, spokenText);
+    const evalResult = evaluateAyahVoiceRecitation(
+      targetArabic,
+      targetLatin,
+      spokenText,
+      sensitivity
+    );
 
     if (evalResult.isCorrect) {
-      // 🟢 SUCCESS: TURN GREEN, PLAY SUCCESS CHIME, UNLOCK & ADVANCE!
+      // 🟢 SUCCESS: TURN GREEN, PLAY SUCCESS CHIME, REVEAL AYAT, UNLOCK & ADVANCE!
       setGateState('correct');
       soundEffects.playCorrect();
       setFeedbackMessage(evalResult.feedbackMessage);
@@ -324,11 +357,23 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
       stopListening();
 
       // Check if this was the last ayah of the Surah
-      if (currentAyahIndex + 1 >= surah.ayat.length) {
-        setIsFinishedSurah(true);
-        soundEffects.playFanfare();
-        triggerCelebration();
-        addXP(30, `Khatam Uji Lisan Surat ${surah.nameLatin || surah.nameId}!`);
+      if (currentAyahIndex + 1 >= (surah.ayat?.length || 0)) {
+        if (autoContinueNextSurah) {
+          // 🎉 Selesai surat! Auto-advance to next Surah in 1.8s!
+          soundEffects.playFanfare();
+          triggerCelebration();
+          addXP(30, `Khatam Uji Lisan Surat ${surah.nameLatin || surah.nameId}!`);
+          setFeedbackMessage(`🎉 Surat ${surah.nameLatin || surah.nameId} Tuntas! Melanjutkan otomatis ke surat berikutnya... 🚀`);
+
+          autoAdvanceTimeoutRef.current = setTimeout(() => {
+            handleAdvanceToNextSurah();
+          }, 1800);
+        } else {
+          setIsFinishedSurah(true);
+          soundEffects.playFanfare();
+          triggerCelebration();
+          addXP(30, `Khatam Uji Lisan Surat ${surah.nameLatin || surah.nameId}!`);
+        }
       } else {
         // Auto advance to next verse after 1.6 seconds!
         autoAdvanceTimeoutRef.current = setTimeout(() => {
@@ -341,6 +386,7 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
       soundEffects.playIncorrect();
       setMistakeCountInCurrentAyah((prev) => prev + 1);
       setFeedbackMessage(
+        evalResult.feedbackMessage ||
         '⛔ LAFADZ SALAH / TERLEWAT! Ayat terkunci berwarna merah 🔴. Dengarkan audio Syaikh atau ulangi lafadz yang benar untuk membuka gembok!'
       );
 
@@ -359,12 +405,32 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
   const advanceToNextAyah = () => {
     if (currentAyahIndex + 1 < (surah.ayat?.length || 0)) {
       setCurrentAyahIndex((prev) => prev + 1);
+    } else {
+      handleAdvanceToNextSurah();
+    }
+  };
+
+  const handleAdvanceToNextSurah = (targetSurahId?: number) => {
+    const nextId = targetSurahId || (selectedSurahId < 114 ? selectedSurahId + 1 : 1);
+    setSelectedSurahId(nextId);
+    setCurrentAyahIndex(0);
+    setIsFinishedSurah(false);
+    setGateState('idle');
+    setLiveTranscript('');
+    setMistakeCountInCurrentAyah(0);
+    setIsPeeking(false);
+
+    // Update Juz if needed
+    const nextCat = getAllSurahCatalog().find((s) => s.id === nextId);
+    if (nextCat && nextCat.juzNumber !== selectedJuz) {
+      setSelectedJuz(nextCat.juzNumber);
     }
   };
 
   const retryCurrentAyah = () => {
     setGateState('idle');
     setLiveTranscript('');
+    setIsPeeking(false);
     setFeedbackMessage('Silakan klik mikrofon dan baca kembali dengan benar!');
     if (currentAyah?.textArabic) {
       const words = currentAyah.textArabic.split(/\s+/).filter(Boolean);
@@ -422,9 +488,9 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-3xl w-full border-2 border-emerald-500/30 dark:border-emerald-500/20 shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh]">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full border-2 border-emerald-500/30 dark:border-emerald-500/20 shadow-2xl overflow-hidden my-auto flex flex-col max-h-[94vh]">
         {/* Top Header */}
-        <div className="px-5 py-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white flex items-center justify-between">
+        <div className="px-5 py-4 bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-emerald-300 font-bold border border-white/20">
               <Mic className="w-5 h-5 animate-pulse" />
@@ -439,61 +505,57 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                 </span>
               </div>
               <p className="text-[11px] text-emerald-200">
-                Salah = <span className="text-red-300 font-bold">Merah (Terkunci 🔒)</span> • Benar = <span className="text-emerald-300 font-bold">Hijau (Terbuka 🔓)</span>
+                Salah = <span className="text-red-300 font-extrabold">Merah (Terkunci 🔒)</span> • Benar ={' '}
+                <span className="text-emerald-300 font-extrabold">Hijau (Terbuka 🔓 & Ayat Tampak)</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSettingsView(!showSettingsView)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-                showSettingsView 
-                  ? 'bg-amber-400 text-slate-900 shadow-md' 
-                  : 'bg-white/15 text-white hover:bg-white/25 border border-white/20'
-              }`}
-              title="Pengaturan Target Juz 1 s/d 30 dan Pilihan Surat"
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition border border-white/15 cursor-pointer"
             >
               <Settings className="w-3.5 h-3.5" />
-              <span>{showSettingsView ? 'Tutup Pengaturan' : 'Pilih Juz 1-30'}</span>
+              <span>{showSettingsView ? 'Kembali' : 'Pilih Juz 1-30'}</span>
             </button>
 
             <button
               onClick={onClose}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* SETTINGS / 30 JUZ PICKER VIEW */}
+        {/* Content Body */}
         {showSettingsView ? (
-          <div className="p-5 sm:p-7 overflow-y-auto flex-1 space-y-6 bg-slate-50 dark:bg-slate-900/90">
+          /* JUZ & SURAH SELECTOR SCREEN */
+          <div className="p-6 overflow-y-auto space-y-5 flex-1">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <div className="space-y-0.5">
-                <h4 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                  <Compass className="w-5 h-5 text-emerald-600" />
-                  <span>Pilih Target Juz (1 s/d 30) & Surat</span>
+              <div>
+                <h4 className="font-black text-base text-slate-900 dark:text-white">
+                  Pilih Juz & Surat Target
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Tentukan Juz yang ingin kamu latih suaranya dengan sistem gembok merah-hijau
+                <p className="text-xs text-slate-500">
+                  Pilih dari Juz 1 sampai 30 untuk diuji lisannya:
                 </p>
               </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs">
-                Juz Aktif: {selectedJuz}
-              </span>
+              <button
+                onClick={() => setShowSettingsView(false)}
+                className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-500 transition cursor-pointer"
+              >
+                Mulai Uji Lisan &rarr;
+              </button>
             </div>
 
-            {/* Quick Juz Tabs Grid (1 to 30) */}
+            {/* 30 Juz Grid */}
             <div className="space-y-2">
-              <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                <span>1. Pilih Nomor Juz (Tersedia Seluruh 30 Juz Al-Qur'an):</span>
-                <span className="text-[11px] text-emerald-600 font-bold">
-                  {allJuzList.find((j) => j.juzNumber === selectedJuz)?.name}
-                </span>
+              <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                1. Pilih Juz (1 - 30):
               </label>
-              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-1.5 max-h-40 overflow-y-auto p-2 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-1.5">
                 {Array.from({ length: 30 }, (_, i) => i + 1).map((juzNum) => {
                   const isSelected = selectedJuz === juzNum;
                   return (
@@ -599,27 +661,24 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                 >
                   {Array.from({ length: surah.totalAyat || 1 }, (_, i) => i + 1).map((aNum) => (
                     <option key={aNum} value={aNum}>
-                      Mulai dari Ayat {aNum}
+                      Ayat ke-{aNum}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Launch Button */}
-            <div className="pt-2">
-              <button
-                onClick={() => setShowSettingsView(false)}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-xl shadow-emerald-600/30 transition transform active:scale-98 cursor-pointer"
-              >
-                <Mic className="w-5 h-5" />
-                <span>Simpan Pengaturan & Mulai Uji Lisan Juz {selectedJuz}</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setShowSettingsView(false)}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-xl shadow-emerald-600/30 transition transform active:scale-98 cursor-pointer"
+            >
+              <Mic className="w-5 h-5" />
+              <span>Simpan & Mulai Uji Lisan Sekarang</span>
+            </button>
           </div>
         ) : (
           <>
-            {/* Subheader: Quick Bar for Current Juz, Surah Selector & Mode Switches */}
+            {/* Subheader: Quick Bar for Current Juz, Surah Selector & Options */}
             <div className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
               {/* Juz & Surah Quick Dropdown */}
               <div className="flex items-center gap-2 flex-wrap">
@@ -659,62 +718,81 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                 </div>
               </div>
 
-              {/* Mode Selector */}
-              <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              {/* Advanced Tool Toggles */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Blind Mode Toggle */}
                 <button
-                  onClick={() => setGateMode('verse_by_verse')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] ${
-                    gateMode === 'verse_by_verse'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-300'
+                  onClick={() => setIsBlindMode(!isBlindMode)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold transition text-[11px] cursor-pointer shadow-xs ${
+                    isBlindMode 
+                      ? 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                   }`}
+                  title="Mode Uji Hafalan Gaib: Teks ayat disembunyikan sampai dibaca dengan benar!"
                 >
-                  Ayat Beruntun
+                  {isBlindMode ? <EyeOff className="w-3.5 h-3.5 text-amber-600" /> : <Eye className="w-3.5 h-3.5 text-slate-400" />}
+                  <span>{isBlindMode ? '🙈 Mode Gaib: Aktif' : '👁️ Teks Tampak'}</span>
                 </button>
-                <button
-                  onClick={() => setGateMode('finish_ayah')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] ${
-                    gateMode === 'finish_ayah'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-300'
-                  }`}
-                >
-                  Sambung Ayat
-                </button>
-              </div>
 
-              {onOpenContinuousVoice && (
+                {/* Auto-Continue Next Surah Toggle */}
                 <button
-                  onClick={() => {
-                    onClose();
-                    onOpenContinuousVoice(selectedSurahId, currentAyah.ayahNumber);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white font-black text-[11px] shadow-xs hover:scale-105 transition cursor-pointer"
-                  title="Beralih ke Mode Baca Berjalan (Hands-Free: Benar = Jalan, Salah = Berhenti)"
+                  onClick={() => setAutoContinueNextSurah(!autoContinueNextSurah)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl font-bold transition text-[11px] cursor-pointer shadow-xs ${
+                    autoContinueNextSurah
+                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                  title="Lanjut otomatis ke surat berikutnya tanpa berhenti"
                 >
-                  <Mic className="w-3 h-3 text-amber-300 animate-pulse" />
-                  <span>Mode Lisan Berjalan 🚀</span>
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{autoContinueNextSurah ? '🚀 Lanjut Terus Antar Surat' : '⏹️ Stop per Surat'}</span>
                 </button>
-              )}
+
+                {/* Sensitivity Selector */}
+                <select
+                  value={sensitivity}
+                  onChange={(e) => setSensitivity(e.target.value as MatchSensitivity)}
+                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1 font-bold text-[11px] text-slate-800 dark:text-slate-200 focus:outline-hidden cursor-pointer"
+                  title="Tingkat Ketelitian Penilaian Suara"
+                >
+                  <option value="strict">🎯 Sangat Teliti (90%)</option>
+                  <option value="standard">⚖️ Standar (80%)</option>
+                  <option value="lenient">🌱 Ramah Anak (70%)</option>
+                </select>
+
+                {onOpenContinuousVoice && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenContinuousVoice(selectedSurahId, currentAyah.ayahNumber);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white font-black text-[11px] shadow-xs hover:scale-105 transition cursor-pointer"
+                    title="Beralih ke Mode Baca Berjalan (Hands-Free: Benar = Jalan, Salah = Berhenti)"
+                  >
+                    <Mic className="w-3 h-3 text-amber-300 animate-pulse" />
+                    <span>Baca Berjalan 🚀</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Main Content Body */}
-            <div className="p-5 sm:p-7 overflow-y-auto flex-1 space-y-6">
+            {/* Main Testing View */}
+            <div className="p-5 sm:p-7 overflow-y-auto flex-1 space-y-5">
               {isLoadingSurah ? (
                 <div className="py-16 text-center space-y-3">
-                  <Loader2 className="w-10 h-10 text-emerald-600 animate-spin mx-auto" />
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    Memuat Teks & Audio Surat dari Juz {selectedJuz}...
+                  <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mx-auto" />
+                  <p className="text-xs font-bold text-slate-400">
+                    Memuat data Surat {surah.nameLatin || selectedSurahId}...
                   </p>
                 </div>
               ) : isFinishedSurah ? (
-                /* FINISHED CELEBRATION CARD */
-                <div className="py-10 text-center space-y-5">
+                /* FINISHED CELEBRATION CARD WITH NEXT SURAH ADVANCE BUTTON */
+                <div className="py-8 text-center space-y-5 animate-in zoom-in-95">
                   <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600 text-white flex items-center justify-center text-4xl shadow-xl mx-auto animate-bounce">
                     🏆
                   </div>
                   <div className="space-y-1">
-                    <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">
                       Masya Allah, Sempurna! 🎉
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto">
@@ -726,65 +804,67 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-center gap-3">
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    {/* Next Surah Action Button */}
+                    <button
+                      onClick={() => handleAdvanceToNextSurah()}
+                      className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs shadow-lg hover:from-emerald-500 hover:to-teal-500 transition transform hover:scale-105 cursor-pointer"
+                    >
+                      <span>Lanjut ke Surat Berikutnya ({nextSurahCatalog?.nameLatin || `Surat ${nextSurahId}`})</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
                     <button
                       onClick={() => {
                         setCurrentAyahIndex(0);
                         setIsFinishedSurah(false);
                       }}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs shadow-md hover:bg-emerald-500 transition cursor-pointer"
+                      className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-200 transition cursor-pointer border border-slate-200 dark:border-slate-700"
                     >
-                      <RotateCcw className="w-4 h-4" />
+                      <RotateCcw className="w-4 h-4 text-emerald-600" />
                       <span>Ulangi Surat Ini</span>
                     </button>
 
                     <button
                       onClick={() => setShowSettingsView(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-amber-500 text-white font-extrabold text-xs shadow-md hover:bg-amber-400 transition cursor-pointer"
+                      className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-500 text-white font-extrabold text-xs shadow-md hover:bg-amber-400 transition cursor-pointer"
                     >
                       <Compass className="w-4 h-4" />
-                      <span>Pilih Juz Lainnya</span>
-                    </button>
-
-                    <button
-                      onClick={onClose}
-                      className="px-5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-200 transition cursor-pointer"
-                    >
-                      Tutup
+                      <span>Pilih Juz / Surat Lain</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 /* ACTIVE AYAH VOICE GATE CARD */
-                <div className="space-y-6">
+                <div className="space-y-5">
                   {/* Ayah Progress Counter and Gate Status Badge */}
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs">
-                        Juz {selectedJuz} • Ayat {currentAyah.ayahNumber} dari {surah.totalAyat}
+                        Juz {selectedJuz} - Ayat {currentAyah.ayahNumber} dari {surah.totalAyat}
                       </span>
-                      {consecutiveCorrectCount > 0 && (
+                      {consecutiveCorrectCount > 1 && (
                         <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 font-extrabold text-xs">
                           <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500" />
-                          <span>{consecutiveCorrectCount}x Lancar Berturut</span>
+                          <span>Streak: {consecutiveCorrectCount} Lancar</span>
                         </span>
                       )}
                     </div>
 
-                    {/* Status Indicator */}
+                    {/* Lock Status Pill */}
                     <div className="flex items-center gap-1.5">
                       {gateState === 'correct' ? (
-                        <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500 text-white text-xs font-extrabold shadow-md animate-pulse">
+                        <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500 text-white text-xs font-black shadow-md animate-pulse">
                           <Unlock className="w-3.5 h-3.5" />
-                          <span>TERBUKA (BENAR)</span>
+                          <span>TERBUKA (BENAR ✓)</span>
                         </span>
                       ) : gateState === 'wrong' ? (
-                        <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-red-600 text-white text-xs font-extrabold shadow-md animate-bounce">
+                        <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600 text-white text-xs font-black shadow-md animate-bounce">
                           <Lock className="w-3.5 h-3.5" />
-                          <span>TERKUNCI (SALAH)</span>
+                          <span>TERKUNCI (SALAH ✗)</span>
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">
+                        <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">
                           <Lock className="w-3.5 h-3.5 text-slate-400" />
                           <span>Menunggu Suara</span>
                         </span>
@@ -792,57 +872,120 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                     </div>
                   </div>
 
-                  {/* Central Quran Text Box with Word Highlighting */}
-                  <div
-                    className={`p-6 sm:p-8 rounded-3xl text-center border-3 transition-all duration-300 space-y-4 ${
-                      gateState === 'correct'
-                        ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-500/10'
-                        : gateState === 'wrong'
-                        ? 'bg-red-500/10 dark:bg-red-950/40 border-red-500 shadow-lg shadow-red-500/10 ring-4 ring-red-400/20'
-                        : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    {gateMode === 'finish_ayah' && (
-                      <div className="inline-block px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[11px] font-extrabold mb-2">
-                        🧩 Lanjutkan potongan ayat di bawah dengan suaramu:
+                  {/* CENTRAL BOX: BLIND MODE CARD OR REVEALED VERSE */}
+                  {isBlindMode && gateState !== 'correct' && !isPeeking ? (
+                    /* 1. BLIND MODE: AYAT TIDAK TAMPAK (GAIB) */
+                    <div className={`p-8 sm:p-10 rounded-3xl text-center border-3 transition-all duration-300 space-y-4 relative overflow-hidden ${
+                      gateState === 'wrong'
+                        ? 'bg-red-950/40 border-red-500 shadow-xl shadow-red-500/20 ring-4 ring-red-400/20 animate-shake'
+                        : 'bg-gradient-to-b from-slate-900 to-slate-950 border-emerald-500/40 shadow-xl'
+                    }`}>
+                      <div className={`w-16 h-16 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-inner transition ${
+                        gateState === 'wrong'
+                          ? 'bg-red-500/20 text-red-400 border border-red-400/40 animate-bounce'
+                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-400/30 animate-pulse'
+                      }`}>
+                        🔒
                       </div>
-                    )}
 
-                    {/* Word Chips in Arabic */}
-                    <div className="font-arabic text-3xl sm:text-4xl lg:text-5xl leading-[2.2] sm:leading-[2.4] text-slate-900 dark:text-white flex flex-wrap items-center justify-center gap-2 dir-rtl">
-                      {wordStatuses.map((item, idx) => {
-                        let wordClass = 'px-2 py-1 rounded-2xl transition-all duration-200';
-                        if (item.status === 'correct') {
-                          wordClass +=
-                            ' bg-emerald-500 text-white shadow-md ring-2 ring-emerald-300 scale-105';
-                        } else if (item.status === 'wrong') {
-                          wordClass +=
-                            ' bg-red-600 text-white shadow-md ring-2 ring-red-300 scale-105 animate-shake';
-                        } else {
-                          wordClass += ' hover:bg-slate-200/50 dark:hover:bg-slate-700/50';
-                        }
+                      <div className="space-y-1.5">
+                        <span className="px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-xs border border-emerald-400/30">
+                          Mode Uji Hafalan Gaib (Ayat Tidak Tampak)
+                        </span>
+                        <h3 className="text-xl sm:text-2xl font-black text-white">
+                          Bacakan Ayat ke-{currentAyah.ayahNumber} dari Hafalan Ingatanmu!
+                        </h3>
+                        <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+                          Teks ayat disembunyikan. Bacakan langsung dengan suaramu! Jika bacaanmu <strong>benar 🟢</strong>, ayat akan seketika <strong>tampak terbuka</strong> dan meluncur ke ayat berikutnya!
+                        </p>
+                      </div>
 
-                        return (
-                          <span key={idx} className={wordClass}>
-                            {item.word}
-                          </span>
-                        );
-                      })}
-                      <span className="inline-flex items-center justify-center font-sans text-sm sm:text-base mx-2 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold border border-emerald-300 select-none">
-                        {currentAyah.ayahNumber}
-                      </span>
+                      {/* Peek button */}
+                      <div className="pt-2 flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setIsPeeking(true)}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-amber-300 text-xs font-bold transition border border-white/20 cursor-pointer"
+                          title="Klik untuk mengintip jika lupa"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Intip Teks Ayat (Bantuan)</span>
+                        </button>
+                      </div>
                     </div>
+                  ) : (
+                    /* 2. AYAT TAMPAK: REVEALED WHEN CORRECT, OR WHEN PEEKING, OR WHEN BLIND MODE OFF */
+                    <div
+                      className={`p-6 sm:p-8 rounded-3xl text-center border-3 transition-all duration-300 space-y-4 relative ${
+                        gateState === 'correct'
+                          ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-500 shadow-xl shadow-emerald-500/20 animate-in zoom-in-95 duration-200'
+                          : gateState === 'wrong'
+                          ? 'bg-red-500/10 dark:bg-red-950/40 border-red-500 shadow-lg shadow-red-500/10 ring-4 ring-red-400/20 animate-shake'
+                          : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {/* Banner when unlocked in blind mode */}
+                      {isBlindMode && gateState === 'correct' && (
+                        <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-500 text-white font-black text-xs shadow-md animate-bounce mb-1">
+                          <Unlock className="w-3.5 h-3.5" />
+                          <span>✨ MASYA ALLAH BENAR! AYAT BERHASIL TAMPAK TERBUKA!</span>
+                        </div>
+                      )}
 
-                    {/* Latin Transliteration */}
-                    <p className="text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-400 italic">
-                      {currentAyah.textLatin}
-                    </p>
+                      {/* Peek indicator */}
+                      {isPeeking && gateState !== 'correct' && (
+                        <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-800 dark:text-amber-300 text-[11px] font-bold mb-1">
+                          <span>👁️ Mode Mengintip Aktif (Bantuan Ingatan)</span>
+                          <button
+                            onClick={() => setIsPeeking(false)}
+                            className="text-xs font-black underline hover:text-amber-500 cursor-pointer"
+                          >
+                            Sembunyikan Kembali &times;
+                          </button>
+                        </div>
+                      )}
 
-                    {/* Meaning */}
-                    <p className="text-xs text-slate-600 dark:text-slate-300">
-                      "{currentAyah.translationId}"
-                    </p>
-                  </div>
+                      {gateMode === 'finish_ayah' && (
+                        <div className="inline-block px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 text-[11px] font-extrabold mb-1">
+                          🧩 Lanjutkan potongan ayat di bawah dengan suaramu:
+                        </div>
+                      )}
+
+                      {/* Word Chips in Arabic */}
+                      <div className="font-arabic text-3xl sm:text-4xl lg:text-5xl leading-[2.2] sm:leading-[2.4] text-slate-900 dark:text-white flex flex-wrap items-center justify-center gap-2 dir-rtl">
+                        {wordStatuses.map((item, idx) => {
+                          let wordClass = 'px-2 py-1 rounded-2xl transition-all duration-200';
+                          if (item.status === 'correct') {
+                            wordClass +=
+                              ' bg-emerald-500 text-white shadow-md ring-2 ring-emerald-300 scale-105';
+                          } else if (item.status === 'wrong') {
+                            wordClass +=
+                              ' bg-red-600 text-white shadow-md ring-2 ring-red-300 scale-105 animate-shake';
+                          } else {
+                            wordClass += ' hover:bg-slate-200/50 dark:hover:bg-slate-700/50';
+                          }
+
+                          return (
+                            <span key={idx} className={wordClass}>
+                              {item.word}
+                            </span>
+                          );
+                        })}
+                        <span className="inline-flex items-center justify-center font-sans text-sm sm:text-base mx-2 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold border border-emerald-300 select-none">
+                          {currentAyah.ayahNumber}
+                        </span>
+                      </div>
+
+                      {/* Latin Transliteration */}
+                      <p className="text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-400 italic">
+                        {currentAyah.textLatin}
+                      </p>
+
+                      {/* Meaning */}
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        "{currentAyah.translationId}"
+                      </p>
+                    </div>
+                  )}
 
                   {/* Feedback and Alert Box */}
                   <div
@@ -850,8 +993,8 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                       gateState === 'correct'
                         ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 border border-emerald-300'
                         : gateState === 'wrong'
-                        ? 'bg-red-100 dark:bg-red-950 text-red-900 dark:text-red-200 border border-red-300'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        ? 'bg-red-100 dark:bg-red-950 text-red-900 dark:text-red-200 border border-red-300 animate-shake'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                     }`}
                   >
                     {gateState === 'correct' ? (
@@ -862,32 +1005,29 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                       <HelpCircle className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1">
-                      <p>{feedbackMessage}</p>
+                      <p className="font-bold">{feedbackMessage || 'Uji bacaanmu sekarang'}</p>
                       {liveTranscript && (
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                          Suara terdeteksi: "
-                          <span className="font-arabic font-bold text-slate-800 dark:text-slate-200">
-                            {liveTranscript}
-                          </span>
-                          "
+                          Suara terdengar: <span className="font-extrabold italic">"{liveTranscript}"</span>
                         </p>
                       )}
                     </div>
                   </div>
 
+                  {/* Error Notification */}
                   {recognitionError && (
                     <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 text-amber-800 dark:text-amber-300 text-xs">
                       {recognitionError}
                     </div>
                   )}
 
-                  {/* Main Action Bar: Big Mic Button & Audio Help */}
+                  {/* Primary Controls */}
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                    {/* Listening/Mic Button */}
+                    {/* Mic Button */}
                     {!isListening ? (
                       <button
                         onClick={startListening}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm shadow-xl shadow-emerald-500/25 transition transform active:scale-95 cursor-pointer"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-xl shadow-emerald-500/25 transition transform active:scale-95 cursor-pointer"
                       >
                         <Mic className="w-5 h-5" />
                         <span>Mulai Bacakan Ayat Ini</span>
@@ -895,27 +1035,28 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                     ) : (
                       <button
                         onClick={stopListening}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-sm shadow-xl shadow-red-500/25 transition animate-pulse cursor-pointer"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-sm shadow-xl shadow-red-500/25 transition animate-pulse cursor-pointer"
                       >
                         <MicOff className="w-5 h-5" />
-                        <span>Selesai Bicara (Evaluasi)</span>
+                        <span>Sedang Menyimak... (Klik untuk Selesai)</span>
                       </button>
                     )}
 
-                    {/* Sheikh Audio Reference Button */}
+                    {/* Sheikh Reference Audio */}
                     <button
                       onClick={togglePlaySheikhAudio}
                       className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl border text-xs font-bold transition cursor-pointer ${
                         isPlayingSheikh
                           ? 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
-                          : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
                       }`}
-                      title="Dengarkan bacaan Syaikh yang benar"
+                      title="Dengarkan bacaan Syaikh jika ragu"
                     >
                       {isPlayingSheikh ? <Pause className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-emerald-600" />}
                       <span>{isPlayingSheikh ? 'Jeda Audio Syaikh' : 'Dengar Contoh Syaikh'}</span>
                     </button>
 
+                    {/* Retry button */}
                     {gateState === 'wrong' && (
                       <button
                         onClick={retryCurrentAyah}
@@ -927,19 +1068,19 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                     )}
                   </div>
 
-                  {/* Simulated Voice Tester */}
+                  {/* Simulated Voice Tester (For fast demonstration & testing) */}
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                    <span className="font-semibold text-[11px]">Tes Cepat Suara:</span>
+                    <span className="font-bold text-[11px]">Tes Cepat Suara:</span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => triggerSimulatedRecitation('correct')}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 text-[11px] font-extrabold hover:bg-emerald-100 transition cursor-pointer"
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 text-[11px] font-black hover:bg-emerald-100 transition cursor-pointer shadow-xs"
                       >
                         🧪 Simulasi Bacaan Benar (Hijau 🔓)
                       </button>
                       <button
                         onClick={() => triggerSimulatedRecitation('wrong')}
-                        className="px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-200 text-[11px] font-extrabold hover:bg-red-100 transition cursor-pointer"
+                        className="px-3.5 py-1.5 rounded-xl bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-300 text-[11px] font-black hover:bg-red-100 transition cursor-pointer shadow-xs"
                       >
                         🧪 Simulasi Bacaan Salah (Merah 🔒)
                       </button>
@@ -950,7 +1091,7 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
             </div>
 
             {/* Footer Navigation */}
-            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-xs">
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-xs shrink-0">
               <button
                 disabled={currentAyahIndex <= 0}
                 onClick={() => setCurrentAyahIndex((prev) => Math.max(0, prev - 1))}
@@ -960,22 +1101,25 @@ export const VoiceRecitationGateModal: React.FC<VoiceRecitationGateModalProps> =
                 <span>Ayat Sebelumnya</span>
               </button>
 
-              {/* Next Button is LOCKED if gate is wrong/pending */}
-              <button
-                disabled={gateState !== 'correct' || currentAyahIndex + 1 >= (surah.ayat?.length || 0)}
-                onClick={advanceToNextAyah}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-extrabold transition cursor-pointer ${
-                  gateState === 'correct'
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-md animate-pulse'
-                    : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60'
-                }`}
-              >
-                {gateState !== 'correct' && <Lock className="w-3.5 h-3.5" />}
-                <span>
-                  {gateState === 'correct' ? 'Lanjut Ayat Berikutnya 🔓' : 'Terkunci (Baca Benar Dulu 🔒)'}
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-medium hidden sm:inline">
+                  {surah.nameLatin || surah.nameId} • Ayat {currentAyah.ayahNumber} dari {surah.totalAyat}
                 </span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+
+                <button
+                  disabled={gateState !== 'correct' && currentAyahIndex >= (surah.ayat?.length || 1) - 1}
+                  onClick={() => advanceToNextAyah()}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-extrabold transition cursor-pointer ${
+                    gateState === 'correct'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-md animate-pulse'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  <span>{currentAyahIndex + 1 >= (surah.ayat?.length || 1) ? 'Surat Berikutnya 🚀' : 'Ayat Berikutnya'}</span>
+                  {gateState !== 'correct' && <Lock className="w-3.5 h-3.5" />}
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </>
         )}

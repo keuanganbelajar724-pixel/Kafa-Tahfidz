@@ -6,6 +6,8 @@ export interface WordMatchStatus {
   status: 'pending' | 'active' | 'correct' | 'wrong';
 }
 
+export type MatchSensitivity = 'strict' | 'standard' | 'lenient';
+
 /**
  * Remove Arabic Harakat / Diacritics / Quranic Symbols
  */
@@ -25,7 +27,7 @@ export function removeArabicHarakat(text: string): string {
 }
 
 /**
- * Normalize Latin Transliteration for phonetic matching
+ * Normalize Latin Transliteration for phonetic matching without collapsing different letters
  */
 export function normalizeLatinText(text: string): string {
   if (!text) return '';
@@ -36,17 +38,6 @@ export function normalizeLatinText(text: string): string {
     .replace(/ii|i\^|ī/g, 'i')
     .replace(/uu|u\^|ū/g, 'u')
     .replace(/ro/g, 'ra')
-    .replace(/dho/g, 'dha')
-    .replace(/sho/g, 'sha')
-    .replace(/to/g, 'ta')
-    .replace(/dzo/g, 'dza')
-    .replace(/zo/g, 'za')
-    .replace(/sh|sy/g, 's')
-    .replace(/th/g, 't')
-    .replace(/dh|dz/g, 'z')
-    .replace(/ts/g, 's')
-    .replace(/gh/g, 'g')
-    .replace(/kh/g, 'k')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -105,7 +96,8 @@ export function calculateSimilarity(str1: string, str2: string): number {
 export function evaluateAyahVoiceRecitation(
   targetArabic: string,
   targetLatin: string,
-  spokenText: string
+  spokenText: string,
+  sensitivity: MatchSensitivity = 'strict'
 ): {
   isCorrect: boolean;
   score: number;
@@ -123,45 +115,97 @@ export function evaluateAyahVoiceRecitation(
   const targetWordTokens = cleanTargetArabic.split(/\s+/).filter(Boolean);
   const spokenWordTokens = cleanSpokenArabic.split(/\s+/).filter(Boolean);
 
+  const targetLatinTokens = cleanTargetLatin.split(/\s+/).filter(Boolean);
+  const spokenLatinTokens = cleanSpokenLatin.split(/\s+/).filter(Boolean);
+
   const totalWords = targetWordTokens.length;
   let matchedCount = 0;
+  let firstWrongIndex = -1;
+
+  // Thresholds based on sensitivity
+  // In strict mode, words require high accuracy (>= 85%) and missing words are strictly rejected.
+  const wordThreshold = sensitivity === 'strict' ? 0.85 : sensitivity === 'standard' ? 0.80 : 0.70;
+  const overallThreshold = sensitivity === 'strict' ? 0.82 : sensitivity === 'standard' ? 0.75 : 0.65;
+
+  let spokenCursor = 0;
 
   const wordStatuses: WordMatchStatus[] = rawWords.map((word, idx) => {
     const cleanWord = targetWordTokens[idx] || removeArabicHarakat(word);
-    
-    // Check if clean word exists in spoken tokens or is substring
-    const isDirectMatch = spokenWordTokens.some((spokenToken) => {
-      if (spokenToken === cleanWord) return true;
-      if (cleanWord.length >= 3 && (spokenToken.includes(cleanWord) || cleanWord.includes(spokenToken))) {
-        return true;
-      }
-      return calculateSimilarity(spokenToken, cleanWord) >= 0.70;
-    });
+    const latinWord = targetLatinTokens[idx] || '';
 
-    if (isDirectMatch) {
+    let matched = false;
+
+    // 1. Check in sequence within spoken tokens
+    for (let sIdx = spokenCursor; sIdx < Math.min(spokenWordTokens.length, spokenCursor + 3); sIdx++) {
+      const spoken = spokenWordTokens[sIdx];
+      if (spoken === cleanWord) {
+        matched = true;
+        spokenCursor = sIdx + 1;
+        break;
+      }
+      if (cleanWord.length >= 3 && calculateSimilarity(spoken, cleanWord) >= wordThreshold) {
+        matched = true;
+        spokenCursor = sIdx + 1;
+        break;
+      }
+    }
+
+    // 2. Check Latin phonetic match if Arabic didn't match
+    if (!matched && latinWord) {
+      for (let sIdx = 0; sIdx < spokenLatinTokens.length; sIdx++) {
+        const spoken = spokenLatinTokens[sIdx];
+        if (spoken === latinWord) {
+          matched = true;
+          break;
+        }
+        if (latinWord.length >= 3 && calculateSimilarity(spoken, latinWord) >= wordThreshold) {
+          matched = true;
+          break;
+        }
+      }
+    }
+
+    if (matched) {
       matchedCount++;
       return { word, cleanWord, status: 'correct' };
     } else {
-      return { word, cleanWord, status: 'pending' };
+      if (firstWrongIndex === -1) firstWrongIndex = idx;
+      return { word, cleanWord, status: 'wrong' };
     }
   });
 
-  // Calculate overall similarity
+  // Calculate overall string similarity
   const arabicSimilarity = calculateSimilarity(cleanTargetArabic, cleanSpokenArabic);
   const latinSimilarity = calculateSimilarity(cleanTargetLatin, cleanSpokenLatin);
   const bestSimilarity = Math.max(arabicSimilarity, latinSimilarity);
 
-  // Consider correct if either word ratio >= 70% or overall string similarity >= 65%
+  // Strict Evaluation:
+  // If user made a mistake in letters/words, it must NOT pass just because the ending was correct!
   const wordRatio = totalWords > 0 ? matchedCount / totalWords : 0;
-  const isCorrect = wordRatio >= 0.65 || bestSimilarity >= 0.60;
+  
+  let isCorrect = false;
+  if (sensitivity === 'strict') {
+    // In strict mode: All words must match (or at least 90% if very long verse) AND overall similarity >= 82%
+    isCorrect = totalWords <= 4 
+      ? matchedCount === totalWords && bestSimilarity >= 0.80
+      : wordRatio >= 0.90 && bestSimilarity >= 0.80;
+  } else if (sensitivity === 'standard') {
+    isCorrect = wordRatio >= 0.80 && bestSimilarity >= 0.75;
+  } else {
+    isCorrect = wordRatio >= 0.70 || bestSimilarity >= 0.65;
+  }
 
   const score = Math.round(Math.max(wordRatio * 100, bestSimilarity * 100));
 
   let feedbackMessage = '';
   if (isCorrect) {
-    feedbackMessage = '🌟 Masya Allah! Bacaanmu Tepat dan Lancar. Gembok Terbuka! 🔓';
+    feedbackMessage = '🌟 Masya Allah! Seluruh Lafadz Tepat, Tartil & Fasih. Gembok Terbuka! 🔓';
   } else {
-    feedbackMessage = '⚠️ Bacaan belum tepat atau ada harakat/lafadz yang terlewat. Silakan ulangi ayat ini dengan benar untuk membuka ayat berikutnya!';
+    if (firstWrongIndex !== -1 && rawWords[firstWrongIndex]) {
+      feedbackMessage = `⛔ Lafadz kata ke-${firstWrongIndex + 1} ("${rawWords[firstWrongIndex]}") keliru atau belum lengkap. Harap baca seluruh ayat dengan teliti dari awal sampai akhir!`;
+    } else {
+      feedbackMessage = '⚠️ Bacaan belum tepat atau ada huruf/kata yang terlewat. Silakan ulangi ayat ini dengan benar untuk membuka ayat berikutnya!';
+    }
   }
 
   return {
